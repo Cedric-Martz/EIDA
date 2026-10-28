@@ -1,0 +1,13 @@
+Hackathon kickoff notes
+=======================
+
+- Muse is positioned as a reasoning model.
+- Muse Image focuses on image generation and understanding.
+- Muse Spark is intended for rapid, local product development.
+- Start with problems the team already understands.
+- The result may serve communities as a product or as a practical tool.
+- Apply AI in a field where the team already has domain knowledge.
+- Target a working prototype that people can actually use.
+- Initial API credit mentioned during kickoff: USD 150. Verify current terms before relying on this amount.
+
+These notes summarize the kickoff discussion. They are not authoritative API or competition documentation.

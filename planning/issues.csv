@@ -1,0 +1,21 @@
+Priority,Milestone,Area,Title,Acceptance Criteria,Estimate Hours
+P0,M0,Foundation,"Bootstrap Next.js, TypeScript, ESLint and Prettier",`npm run check` passes on clean install,2
+P0,M0,Foundation,Commit npm lockfile and CI,"CI runs npm ci, format, lint, types, tests, build",2
+P0,M0,Security,"Document secrets, local access and privacy",No keys committed; SECURITY.md reviewed,2
+P0,M1,Capture,Capture 3–8 photos on Galaxy A32 5G,Camera and file fallback tested on phone; image metadata saved,5
+P0,M1,Storage,Persist projects and photos with IndexedDB,Reload restores project; deletion works,4
+P0,M1,Meta,Validate Muse Spark API entitlement and multimodal request,Real consented image smoke test; response schema validated,5
+P0,M2,Documents,Import PDF and selected technical sources,Page-level references retained; size/type limits,6
+P0,M2,Evidence,Build component/evidence graph and validators,No dangling references; unsupported claims labeled,7
+P0,M3,Geometry,Create reusable parametric component builders,"At least five separated, manipulable component primitives",6
+P0,M3,Viewer,Touch-friendly exploded view with evidence panel,"Select, rotate, zoom and inspect on Galaxy A32 5G",7
+P0,M3,Integration,Connect validated observations to viewer,Photos → structured graph → 3D with no hardcoded device claims,7
+P0,M5,Release,Prepare reproducible three-minute demo,Demo can run with saved fixtures and clear limitations,5
+P1,M1,Meta,Implement SAM 3.1 targeted segmentation,One approved photo produces usable masks/boxes,5
+P1,M2,Research,Request a useful next camera view,Uncertainty linked to explicit observation request,4
+P1,M4,Research,Run A/B/C unsupported-claim evaluation,"Metrics, ground truth, prompts and limitations published",7
+P1,M2,Storage,Export and import local projects,Versioned JSON round-trip validated,3
+P1,M5,Recovery,Add evidence-limited reuse and collection guidance,No unsupported rare-earth or safety claims,4
+P2,Post,Geometry,Export GLB,Exported file retains distinct components,5
+P2,Post,Research,Improve multi-view geometry estimation,Measured benchmark and uncertainty retained,12
+P2,Post,Product,Add validated collection-location lookup,User location optional and explicit,8
