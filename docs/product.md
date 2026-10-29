@@ -6,7 +6,9 @@ From multiple photographs and selected technical documents, create an interactiv
 
 ## Current usable slice
 
-The static interface opens on a presentation page, then lets the user deliberately enter a selectable synthetic 3D fixture. The workbench starts with its secondary panels closed. Users can place its six parts in deterministic slots, drag them across the grid, inspect an exploded layout, and trigger a staggered reconstruction animation. A scene drawer accepts 3–8 browser-stored photos. The fixture is deliberately marked as unverified and is not the result of image inference. Model confirmation, controlled-document import, consent for remote inference and live analysis are not currently implemented.
+The static interface opens on a presentation page, then starts a real evidence project instead of silently loading synthetic parts. The user can confirm a known manufacturer/model or leave the identity unknown and begin with photographs. The workspace explains the next step, accepts 3–8 browser-stored photos, and exposes AI configuration only as the continuation of that evidence flow. A confirmed identity is context, never automatic proof of a component.
+
+After a BYOK connection test and explicit per-action consent, exactly three photos can be analyzed by Meta Model API. Validated observations are resolved into a local evidence graph with estimated primitives or unknown placeholders. The viewer restores the latest project or successful run and keeps the six-part fixture behind a clearly labelled demo action. On the workbench, enlarged hit targets, immediate pointer tracking, temporary camera locking and bounded placement improve part manipulation on pointer and touch devices. Controlled-document import, online evidence discovery and SAM segmentation are not currently implemented.
 
 ## Primary user
 

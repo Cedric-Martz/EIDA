@@ -90,7 +90,9 @@ function PartDetails({
   component: ComponentNode;
   depth: number;
 }) {
-  if (component.category === "electronics") {
+  // Decorative details belong only to the explicitly synthetic fixture. Live
+  // evidence-derived components stay primitive and never gain imagined internals.
+  if (component.id === "board") {
     return (
       <group position={[0, 0, depth / 2 + 0.018]}>
         <mesh position={[-0.18, 0.09, 0]}>
@@ -113,7 +115,7 @@ function PartDetails({
     );
   }
 
-  if (component.category === "display") {
+  if (component.id === "screen") {
     return (
       <mesh position={[0, 0, depth / 2 + 0.012]}>
         <planeGeometry args={[2.48, 1.67]} />
@@ -167,6 +169,8 @@ function Part({
   const drag = useRef<DragState | null>(null);
   const dragPoint = useRef(new Vector3());
   const invalidate = useThree((state) => state.invalidate);
+  const controls = useThree((state) => state.controls) as
+    OrbitControlsImpl | undefined;
   const [hovered, setHovered] = useState(false);
   const [manualOffset, setManualOffset] = useState<readonly [number, number]>([
     0, 0,
@@ -175,6 +179,12 @@ function Part({
     70, 45, 5,
   ];
   const depth = Math.max(sourceDepth * SCENE_SCALE, 0.038);
+  const sceneWidth = width * SCENE_SCALE;
+  const sceneHeight = height * SCENE_SCALE;
+  const hitWidth = Math.max(sceneWidth, 0.72);
+  const hitHeight = Math.max(sceneHeight, 0.58);
+  const hitDepth = Math.max(depth, 0.18);
+  const isCylinder = component.geometry.primitive === "cylinder";
   const [physicalX, physicalY] = physicalOffsets[component.id] ?? [0, 0];
   const unknown = component.geometry.kind === "placeholder";
   const exploded = explodedPosition(index, count, explode * 1.6);
@@ -210,6 +220,13 @@ function Part({
     setManualOffset([0, 0]);
     invalidate();
   }, [arrangeKey, invalidate]);
+
+  useEffect(
+    () => () => {
+      if (controls) controls.enabled = true;
+    },
+    [controls],
+  );
 
   useFrame((_, delta) => {
     const current = group.current;
@@ -269,7 +286,9 @@ function Part({
     };
     const target = event.nativeEvent.target;
     if (target instanceof Element) target.setPointerCapture(event.pointerId);
+    if (controls) controls.enabled = false;
     onDragChange(true);
+    invalidate();
   }
 
   function movePart(event: ThreeEvent<PointerEvent>) {
@@ -278,10 +297,10 @@ function Part({
     const point = pointOnWorkbench(event);
     if (!point) return;
 
-    setManualOffset([
-      point.x + drag.current.offsetX - bench.x,
-      point.z + drag.current.offsetZ - bench.z,
-    ]);
+    const nextX = MathUtils.clamp(point.x + drag.current.offsetX, -7.5, 7.5);
+    const nextZ = MathUtils.clamp(point.z + drag.current.offsetZ, -7.5, 7.5);
+    setManualOffset([nextX - bench.x, nextZ - bench.z]);
+    group.current?.position.set(nextX, bench.y, nextZ);
     invalidate();
   }
 
@@ -289,11 +308,16 @@ function Part({
     if (!drag.current) return;
     event.stopPropagation();
     const target = event.nativeEvent.target;
-    if (target instanceof Element) {
+    if (
+      target instanceof Element &&
+      target.hasPointerCapture(drag.current.pointerId)
+    ) {
       target.releasePointerCapture(drag.current.pointerId);
     }
     drag.current = null;
+    if (controls) controls.enabled = true;
     onDragChange(false);
+    invalidate();
   }
 
   return (
@@ -320,10 +344,28 @@ function Part({
         if (!drag.current) onHoverChange(false);
       }}
     >
-      {component.category === "camera" ? (
+      {mode === "bench" && (
+        <mesh>
+          <boxGeometry args={[hitWidth, hitHeight, hitDepth]} />
+          <meshBasicMaterial
+            transparent
+            opacity={0}
+            depthWrite={false}
+            colorWrite={false}
+          />
+        </mesh>
+      )}
+      {isCylinder ? (
         <>
           <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
-            <cylinderGeometry args={[0.115, 0.15, depth, 28]} />
+            <cylinderGeometry
+              args={[
+                Math.max(sceneWidth / 2, 0.04),
+                Math.max(sceneWidth / 2, 0.04),
+                depth,
+                28,
+              ]}
+            />
             <meshStandardMaterial
               color={color}
               roughness={0.2}
@@ -332,18 +374,20 @@ function Part({
               opacity={unknown ? 0.68 : 1}
             />
           </mesh>
-          <mesh position={[0, 0, depth / 2 + 0.004]}>
-            <circleGeometry args={[0.072, 28]} />
-            <meshStandardMaterial
-              color="#101416"
-              roughness={0.12}
-              metalness={0.4}
-            />
-          </mesh>
+          {component.category === "camera" && (
+            <mesh position={[0, 0, depth / 2 + 0.004]}>
+              <circleGeometry args={[Math.max(sceneWidth * 0.3, 0.025), 28]} />
+              <meshStandardMaterial
+                color="#101416"
+                roughness={0.12}
+                metalness={0.4}
+              />
+            </mesh>
+          )}
         </>
       ) : (
         <RoundedBox
-          args={[width * SCENE_SCALE, height * SCENE_SCALE, depth]}
+          args={[sceneWidth, sceneHeight, depth]}
           radius={Math.min(0.045, depth / 2.4)}
           smoothness={3}
           castShadow

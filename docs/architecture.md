@@ -2,12 +2,12 @@
 
 ## Current implementation
 
-One statically exported Next.js TypeScript application, local-first browser state, deterministic domain reconstruction and a React Three Fiber viewer. The current artifact has no server routes. Its optional BYOK connection check calls Meta Model API directly; no media inference is implemented.
+One statically exported Next.js TypeScript application, local-first browser state, deterministic domain reconstruction and a React Three Fiber viewer. The current artifact has no server routes. Its optional BYOK adapter can test a visitor-owned key and, after explicit per-action consent, submit exactly three local photos directly to Meta Model API.
 
 ```mermaid
 flowchart TD
   A[Photos and approved documents] --> B[Browser local storage]
-  B --> C[Future explicit consent]
+  B --> C[Explicit per-run consent]
   C --> D[Visitor-owned key or future protected service]
   D --> E[Meta Model API]
   E --> F[Validated observations]
@@ -28,6 +28,14 @@ flowchart TD
 ## MVP source of truth
 
 The versioned project graph and its evidence records, not the model's narrative and not the Three.js mesh.
+
+## Implemented inference boundary
+
+- `src/features/inference/meta-model-api.ts` owns Meta request/response handling and maps provider failures to stable sanitized codes.
+- `src/domain/inference/observation.ts` validates the structured response before domain processing.
+- `src/domain/evidence/resolve-photo-observations.ts` is a pure deterministic resolver with no browser, React, Three.js or Meta dependency.
+- `src/domain/reconstruction/evidence-geometry.ts` creates an estimated primitive only for an observed, source-linked, recognized external category; every other shape is a placeholder.
+- IndexedDB schema version 2 stores run metadata, consent, exact photo IDs, validated observations and the resolved project. It never stores the API key or raw request images inside a run.
 
 ## Geometry rules
 
@@ -51,13 +59,13 @@ The versioned project graph and its evidence records, not the model's narrative 
 
 ## Local-first privacy
 
-Original photos stay in browser IndexedDB. A BYOK key stays in memory by default or in session storage by explicit choice. For future Meta inference, the user explicitly approves sending minimized images/document excerpts. Data necessarily leaves the device during API calls. EIDA has no server persistence in MVP.
+Original photos stay in browser IndexedDB. A BYOK key stays in memory by default or in session storage by explicit choice. For each Meta photo analysis, the user explicitly approves sending three images. Data necessarily leaves the device during that call. EIDA has no server persistence in MVP.
 
 ## Deployment
 
 The current `out/` artifact is static and may be served without a backend. HTTPS remains required for reliable mobile camera access outside localhost. Browser storage is per-origin and may be evicted.
 
-## API contracts (future, not implemented)
+## Future protected-service contracts
 
 - `POST /api/analyze`: approved resized images -> validated observations.
 - `POST /api/segment`: image and noun phrase -> masks/boxes.
@@ -65,4 +73,4 @@ The current `out/` artifact is static and may be served without a backend. HTTPS
 
 ## Error handling
 
-Use stable error codes, timeouts, no raw provider messages in browser, deterministic fallback to mock mode.
+Use stable error codes, timeouts, no raw provider messages in storage, and at most one retry for `429` or `5xx`. There is no silent fallback from a failed live call to a successful mock result.

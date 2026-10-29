@@ -1,6 +1,6 @@
 # ADR-003: Meta Model API adapter
 
-Status: Accepted
+Status: Superseded for the restricted BYOK prototype by ADR-012 and ADR-013
 
 ## Decision
 

@@ -14,9 +14,9 @@ Do not open a public issue containing API keys, private photographs, sensitive d
 
 ## Controls
 
-- The current static build contains no shared provider key, server route or paid inference call.
+- The current static build contains no shared provider key or server route. An informed visitor can explicitly trigger a paid three-photo call using their own key after a separate consent action.
 - BYOK credentials are held in memory by default and may be stored in `sessionStorage` only after an explicit user choice. They are never logged or included in project exports.
-- No model-provider calls run in CI.
+- No model-provider calls run in tests or CI; the adapter uses injected network fakes.
 - Maintainer-owned or shared provider credentials must remain in a separately protected server environment and must never use a `NEXT_PUBLIC_` variable.
 - Future document parsers must limit file types and sizes and isolate untrusted content.
 - Never log images, raw documents, credentials, or complete model responses containing personal data.
