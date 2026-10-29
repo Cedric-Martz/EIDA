@@ -7,10 +7,14 @@ export function validateProject(input: unknown): Project {
   const componentIds = new Set(project.components.map((c) => c.id));
   if (componentIds.size !== project.components.length)
     throw new Error("Duplicate component IDs");
+  const claimIds = new Set<string>();
   for (const component of project.components) {
     if (component.parentId && !componentIds.has(component.parentId))
       throw new Error(`Unknown parent ${component.parentId}`);
     for (const claim of component.claims) {
+      if (claimIds.has(claim.id))
+        throw new Error(`Duplicate claim ID ${claim.id}`);
+      claimIds.add(claim.id);
       if (claim.componentId !== component.id)
         throw new Error(`Claim owner mismatch: ${claim.id}`);
       if (claim.evidenceIds.some((id) => !ids.has(id)))

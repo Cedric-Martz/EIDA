@@ -14,3 +14,4 @@ Status: Accepted unless noted. Revisit by adding a superseding ADR rather than s
 - 010 Brand name pending (superseded).
 - 011 EIDA name adopted.
 - 012 Static browser workbench for the current demonstrator.
+- 013 Evidence-resolved browser inference with a visitor-owned key.

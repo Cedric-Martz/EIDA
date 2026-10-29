@@ -13,9 +13,9 @@ export const evidenceSchema = z.object({
   description: z.string(),
 });
 export const claimSchema = z.object({
-  id: z.string(),
-  componentId: z.string(),
-  property: z.string(),
+  id: z.string().min(1),
+  componentId: z.string().min(1),
+  property: z.string().min(1),
   value: z.unknown(),
   status: evidenceStatusSchema,
   evidenceIds: z.array(z.string()),
@@ -35,20 +35,21 @@ export const geometrySchema = z.object({
 });
 export const componentSchema = z.object({
   id: z.string().min(1),
-  label: z.string(),
-  category: z.string(),
+  label: z.string().min(1),
+  category: z.string().min(1),
   claims: z.array(claimSchema),
   geometry: geometrySchema,
   parentId: z.string().optional(),
 });
+export const deviceSchema = z.object({
+  manufacturer: z.string().optional(),
+  model: z.string().optional(),
+  confirmedByUser: z.boolean(),
+});
 export const projectSchema = z.object({
   schemaVersion: z.literal(1),
-  id: z.string(),
-  device: z.object({
-    manufacturer: z.string().optional(),
-    model: z.string().optional(),
-    confirmedByUser: z.boolean(),
-  }),
+  id: z.string().min(1),
+  device: deviceSchema,
   components: z.array(componentSchema),
   evidence: z.array(evidenceSchema),
 });

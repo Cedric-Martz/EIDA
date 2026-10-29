@@ -78,4 +78,33 @@ describe("validateProject", () => {
       }),
     ).toThrow("Documented claim lacks document");
   });
+
+  it("rejects an observed claim without evidence", () => {
+    expect(() =>
+      validateProject({
+        schemaVersion: 1,
+        id: "test",
+        device: { confirmedByUser: false },
+        evidence: [],
+        components: [
+          {
+            id: "camera",
+            label: "Camera",
+            category: "camera",
+            geometry: { kind: "placeholder", estimated: true },
+            claims: [
+              {
+                id: "claim-camera",
+                componentId: "camera",
+                property: "presence",
+                value: true,
+                status: "observed",
+                evidenceIds: [],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow("Observed claim lacks observation");
+  });
 });
