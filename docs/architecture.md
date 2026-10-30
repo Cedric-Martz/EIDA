@@ -1,26 +1,26 @@
-# Architecture v1.0
+# Architecture v1.1
 
 ## Current implementation
 
-One statically exported Next.js TypeScript application, local-first browser state, deterministic domain reconstruction and a React Three Fiber viewer. The current artifact has no server routes. Its optional BYOK adapter can test a visitor-owned key and, after explicit per-action consent, submit exactly three local photos directly to Meta Model API.
+One Next.js TypeScript application, local-first browser state, a small server-side provider/source proxy, deterministic domain reconstruction and a React Three Fiber viewer. The static GitHub Pages showcase is a separate target: it can present documentation and fixture assets but cannot run the live reconstruction path.
 
 ```mermaid
 flowchart TD
-  A[Photos and approved documents] --> B[Browser local storage]
-  B --> C[Explicit per-run consent]
-  C --> D[Visitor-owned key or future protected service]
-  D --> E[Meta Model API]
-  E --> F[Validated observations]
-  F --> G[Evidence resolver]
-  G --> H[Component graph]
-  H --> I[Parametric geometry builder]
-  I --> J[Three.js exploded viewer]
+A[Source discovery and user approval] --> B[Local Next.js extraction route]
+B --> C[Evidence snapshot: text dimensions images artifacts]
+D[3–8 local photos] --> E[Explicit per-run consent]
+C --> E
+E --> F[Local Next.js Meta proxy]
+F --> G[Muse inventory]
+G --> H[SAM 3.1 masks]
+H --> I[Local contour and GLB builder]
+I --> J[Assembly validation and Three.js viewer]
 ```
 
 ## Boundaries
 
 - `src/domain`: no React, Next.js, Three.js, or Meta dependencies.
-- `src/server`: reserved for a future protected provider adapter; absent from the static build.
+- `src/server`: public-URL safety checks, evidence extraction and the local Meta proxy. It is not a complete multi-user backend.
 - `src/features`: UI composition and user interaction.
 - `src/storage`: browser persistence; never import in server routes.
 - `src/shared`: small generic types only.
@@ -29,13 +29,12 @@ flowchart TD
 
 The versioned project graph and its evidence records, not the model's narrative and not the Three.js mesh.
 
-## Implemented inference boundary
+## Implemented reconstruction boundary
 
-- `src/features/inference/meta-model-api.ts` owns Meta request/response handling and maps provider failures to stable sanitized codes.
-- `src/domain/inference/observation.ts` validates the structured response before domain processing.
-- `src/domain/evidence/resolve-photo-observations.ts` is a pure deterministic resolver with no browser, React, Three.js or Meta dependency.
-- `src/domain/reconstruction/evidence-geometry.ts` creates an estimated primitive only for an observed, source-linked, recognized external category; every other shape is a placeholder.
-- IndexedDB schema version 2 stores run metadata, consent, exact photo IDs, validated observations and the resolved project. It never stores the API key or raw request images inside a run.
+- `src/server/research/web-evidence.ts` fetches only approved public HTTPS sources, bounds response size, blocks private-network targets and extracts relevant HTML evidence.
+- `src/app/api/meta/inventory` validates Muse's strict inventory response; `src/app/api/meta/segment` decodes SAM's streamed masks with the official parser.
+- `src/features/local-reconstruction` turns accepted masks into simplified, estimated GLB silhouettes and validates their assembly locally.
+- IndexedDB stores projects and photo blobs locally. Provider keys, raw provider responses and extracted source bodies are not persisted as inference records.
 
 ## Geometry rules
 
@@ -59,17 +58,21 @@ The versioned project graph and its evidence records, not the model's narrative 
 
 ## Local-first privacy
 
-Original photos stay in browser IndexedDB. A BYOK key stays in memory by default or in session storage by explicit choice. For each Meta photo analysis, the user explicitly approves sending three images. Data necessarily leaves the device during that call. EIDA has no server persistence in MVP.
+Original photos stay in browser IndexedDB. A BYOK key stays in memory by default or in session storage by explicit choice. For each reconstruction launch, the user explicitly approves sending the selected photos and approved evidence context. Data necessarily leaves the device during extraction/Meta calls. EIDA has no durable server database in this local path.
 
 ## Deployment
 
-The current `out/` artifact is static and may be served without a backend. HTTPS remains required for reliable mobile camera access outside localhost. Browser storage is per-origin and may be evicted.
+`npm run dev` or `npm run build && npm start` serves the live path. HTTPS remains required for reliable mobile camera access outside localhost. Browser storage is per-origin and may be evicted. GitHub Pages can host only a separate static guide/demo; it cannot safely host the provider proxy or secret.
 
 ## Future protected-service contracts
 
 - `POST /api/analyze`: approved resized images -> validated observations.
 - `POST /api/segment`: image and noun phrase -> masks/boxes.
 - `POST /api/documents/extract`: approved document -> referenced claims.
+
+## Resource limits and non-goals
+
+The implementation intentionally avoids paid infrastructure: no hosted GPU, search API, database, object storage, queue or server-side billing is part of the current path. That means source extraction is bounded, PDF/CAD contents are only indexed, live processing is sequential and local, provider credits are user/hackathon supplied, and there is no public-user isolation or quota enforcement. Full photogrammetry, hidden-surface CAD, material identification and certified repair/recycling guidance are outside the current evidence model.
 
 ## Error handling
 

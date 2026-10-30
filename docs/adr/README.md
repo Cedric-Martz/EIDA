@@ -13,5 +13,7 @@ Status: Accepted unless noted. Revisit by adding a superseding ADR rather than s
 - 009 No Python backend for MVP.
 - 010 Brand name pending (superseded).
 - 011 EIDA name adopted.
-- 012 Static browser workbench for the current demonstrator.
-- 013 Evidence-resolved browser inference with a visitor-owned key.
+- 012 Static browser workbench for the documentation/synthetic-demo showcase
+  (superseded for live reconstruction by ADR-013).
+- 013 Evidence-resolved local reconstruction through a visitor-owned key and
+  local Next.js proxy.

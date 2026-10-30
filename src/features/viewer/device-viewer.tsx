@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Canvas,
   type ThreeEvent,
@@ -10,12 +10,36 @@ import {
 import {
   ContactShadows,
   Edges,
+  Environment,
   Grid,
+  Lightformer,
   OrbitControls,
   RoundedBox,
+  useGLTF,
 } from "@react-three/drei";
-import { Group, MathUtils, Plane, Vector3 } from "three";
+import {
+  Color,
+  DoubleSide,
+  Euler,
+  FrontSide,
+  Group,
+  MathUtils,
+  Matrix4,
+  Mesh,
+  Plane,
+  Quaternion,
+  Vector2,
+  Vector3,
+} from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import {
+  deriveAssembledTransforms,
+  deriveExplodedTransforms,
+  type AssemblyManifest,
+  type AssemblyPart,
+  type GeometryAsset,
+  type PbrMaterialProfile,
+} from "@/domain/assembly";
 import type { ComponentNode } from "@/domain/evidence/schema";
 import { explodedPosition } from "@/domain/reconstruction/explode";
 
@@ -24,6 +48,22 @@ export type SceneMode = "bench" | "exploded" | "assembled";
 const WORKBENCH_Y = -1.34;
 const SCENE_SCALE = 0.011;
 const dragPlane = new Plane(new Vector3(0, 1, 0), -WORKBENCH_Y);
+
+type PartSceneTransform = {
+  position: Vector3;
+  quaternion: Quaternion;
+  scale: Vector3;
+};
+
+type RenderGeometry = {
+  dimensionsMm: readonly [number, number, number];
+  primitive: "box" | "rounded_box" | "cylinder" | "sphere" | "plane";
+  cornerRadiusMm?: number;
+  offsetMm: readonly [number, number, number];
+};
+
+const DEFAULT_DIMENSIONS_MM = [70, 45, 5] as const;
+const ZERO_OFFSET_MM = [0, 0, 0] as const;
 
 const materialColors: Record<string, string> = {
   display: "#24333b",
@@ -39,6 +79,67 @@ const physicalOffsets: Record<string, readonly [number, number]> = {
   battery: [0.32, -0.16],
   camera: [0.96, 0.64],
 };
+
+function sceneTransformFromMatrix(
+  worldMatrix: readonly number[],
+): PartSceneTransform {
+  const position = new Vector3();
+  const quaternion = new Quaternion();
+  const scale = new Vector3();
+  new Matrix4().fromArray(worldMatrix).decompose(position, quaternion, scale);
+  position.multiplyScalar(SCENE_SCALE);
+  return { position, quaternion, scale };
+}
+
+function renderGeometryForPart(
+  component: ComponentNode,
+  assemblyPart?: AssemblyPart,
+  geometryAsset?: GeometryAsset,
+): RenderGeometry {
+  if (assemblyPart?.geometry.kind === "parametric") {
+    return {
+      dimensionsMm: assemblyPart.geometry.dimensionsMm,
+      primitive: assemblyPart.geometry.primitive,
+      cornerRadiusMm: assemblyPart.geometry.cornerRadiusMm,
+      offsetMm: ZERO_OFFSET_MM,
+    };
+  }
+
+  if (assemblyPart?.geometry.kind === "asset" && geometryAsset?.boundsMm) {
+    const { minMm, maxMm } = geometryAsset.boundsMm;
+    return {
+      dimensionsMm: [
+        maxMm[0] - minMm[0],
+        maxMm[1] - minMm[1],
+        maxMm[2] - minMm[2],
+      ],
+      // Asset loading is intentionally conservative: until a format-specific
+      // loader is validated, its documented bounds are shown as a proxy.
+      primitive: "box",
+      offsetMm: [
+        (minMm[0] + maxMm[0]) / 2,
+        (minMm[1] + maxMm[1]) / 2,
+        (minMm[2] + maxMm[2]) / 2,
+      ],
+    };
+  }
+
+  const dimensionsMm =
+    assemblyPart?.geometry.kind === "placeholder"
+      ? assemblyPart.geometry.dimensionsMm
+      : component.geometry.dimensionsMm;
+
+  return {
+    dimensionsMm: dimensionsMm ?? DEFAULT_DIMENSIONS_MM,
+    primitive:
+      component.geometry.primitive === "cylinder"
+        ? "cylinder"
+        : component.geometry.primitive === "plane"
+          ? "plane"
+          : "box",
+    offsetMm: ZERO_OFFSET_MM,
+  };
+}
 
 function benchPosition(index: number, depth: number): Vector3 {
   const column = index % 3;
@@ -80,6 +181,141 @@ function WorkbenchSurface({ reducedGraphics }: { reducedGraphics: boolean }) {
         </>
       )}
     </group>
+  );
+}
+
+function StudioLighting({ reducedGraphics }: { reducedGraphics: boolean }) {
+  if (reducedGraphics) {
+    return (
+      <>
+        <hemisphereLight args={["#fffdf5", "#8a877f", 1.55]} />
+        <directionalLight
+          position={[4, 7, 5]}
+          color="#fffaf0"
+          intensity={2.1}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <hemisphereLight args={["#fffdf5", "#77736c", 0.85]} />
+      <directionalLight
+        castShadow
+        position={[4, 7, 5]}
+        color="#fff8e8"
+        intensity={2.15}
+        shadow-mapSize={[1024, 1024]}
+        shadow-bias={-0.00008}
+      />
+      <directionalLight
+        position={[-4, 2, 3]}
+        color="#b8d1db"
+        intensity={0.65}
+      />
+      <Environment
+        background={false}
+        frames={1}
+        resolution={256}
+        environmentIntensity={0.78}
+      >
+        <Lightformer
+          form="rect"
+          color="#fff4df"
+          intensity={5.2}
+          position={[0, 6, 4]}
+          scale={[5.5, 2.4, 1]}
+          target={[0, 0, 0]}
+        />
+        <Lightformer
+          form="rect"
+          color="#d8eff7"
+          intensity={3.1}
+          position={[-5, 1.5, 1]}
+          scale={[2.8, 4.5, 1]}
+          target={[0, 0, 0]}
+        />
+        <Lightformer
+          form="rect"
+          color="#ffd6bd"
+          intensity={2.35}
+          position={[4, 2.5, -5]}
+          scale={[3.4, 2.1, 1]}
+          target={[0, 0, 0]}
+        />
+      </Environment>
+    </>
+  );
+}
+
+function PartSurfaceMaterial({
+  profile,
+  fallbackColor,
+  accentColor,
+  fallbackRoughness,
+  fallbackMetalness,
+  unknown,
+  unknownOpacity,
+  selected,
+  reducedGraphics,
+}: {
+  profile?: PbrMaterialProfile;
+  fallbackColor: string;
+  accentColor?: string;
+  fallbackRoughness: number;
+  fallbackMetalness: number;
+  unknown: boolean;
+  unknownOpacity: number;
+  selected: boolean;
+  reducedGraphics: boolean;
+}) {
+  const color = useMemo(() => {
+    if (accentColor) return accentColor;
+    if (!profile) return fallbackColor;
+    return new Color().setRGB(...profile.baseColor);
+  }, [accentColor, fallbackColor, profile]);
+  const emissive = useMemo(() => {
+    if (!profile?.emissiveColor) return new Color(0, 0, 0);
+    return new Color().setRGB(...profile.emissiveColor);
+  }, [profile]);
+  const normalScale = useMemo(
+    () =>
+      profile?.normalScale
+        ? new Vector2(profile.normalScale[0], profile.normalScale[1])
+        : new Vector2(1, 1),
+    [profile],
+  );
+  const profileOpacity = profile?.opacity ?? 1;
+  const opacity = Math.min(profileOpacity, unknown ? unknownOpacity : 1);
+  const transmission = profile?.transmission ?? 0;
+  const transparent = opacity < 1 || transmission > 0;
+  const common = {
+    color,
+    roughness: profile?.roughness ?? fallbackRoughness,
+    metalness: profile?.metalness ?? fallbackMetalness,
+    emissive,
+    emissiveIntensity: profile?.emissiveIntensity ?? 0,
+    normalScale,
+    opacity,
+    transparent,
+    depthWrite: !transparent,
+    side: profile?.doubleSided ? DoubleSide : FrontSide,
+    wireframe: unknown && !selected,
+  };
+
+  if (reducedGraphics) {
+    return <meshStandardMaterial {...common} />;
+  }
+
+  return (
+    <meshPhysicalMaterial
+      {...common}
+      clearcoat={profile?.clearcoat ?? 0}
+      clearcoatRoughness={profile?.clearcoatRoughness ?? 0}
+      transmission={transmission}
+      ior={profile?.ior ?? 1.5}
+    />
   );
 }
 
@@ -133,6 +369,33 @@ function PartDetails({
   return null;
 }
 
+function AssetPartMesh({
+  asset,
+  reducedGraphics,
+}: {
+  asset: GeometryAsset;
+  reducedGraphics: boolean;
+}) {
+  const gltf = useGLTF(asset.uri);
+  const scene = useMemo(() => {
+    const clone = gltf.scene.clone(true);
+    clone.traverse((object) => {
+      if (object instanceof Mesh) {
+        object.castShadow = !reducedGraphics;
+        object.receiveShadow = !reducedGraphics;
+      }
+    });
+    return clone;
+  }, [gltf.scene, reducedGraphics]);
+
+  return (
+    <primitive
+      object={scene}
+      scale={asset.millimetresPerAssetUnit * SCENE_SCALE}
+    />
+  );
+}
+
 type DragState = {
   pointerId: number;
   offsetX: number;
@@ -141,6 +404,11 @@ type DragState = {
 
 function Part({
   component,
+  assemblyPart,
+  geometryAsset,
+  materialProfile,
+  assemblyTransform,
+  reducedGraphics,
   index,
   count,
   explode,
@@ -153,6 +421,11 @@ function Part({
   onDragChange,
 }: {
   component: ComponentNode;
+  assemblyPart?: AssemblyPart;
+  geometryAsset?: GeometryAsset;
+  materialProfile?: PbrMaterialProfile;
+  assemblyTransform?: PartSceneTransform;
+  reducedGraphics: boolean;
   index: number;
   count: number;
   explode: number;
@@ -175,18 +448,29 @@ function Part({
   const [manualOffset, setManualOffset] = useState<readonly [number, number]>([
     0, 0,
   ]);
-  const [width, height, sourceDepth] = component.geometry.dimensionsMm ?? [
-    70, 45, 5,
-  ];
+  const renderGeometry = renderGeometryForPart(
+    component,
+    assemblyPart,
+    geometryAsset,
+  );
+  const [width, height, sourceDepth] = renderGeometry.dimensionsMm;
   const depth = Math.max(sourceDepth * SCENE_SCALE, 0.038);
   const sceneWidth = width * SCENE_SCALE;
   const sceneHeight = height * SCENE_SCALE;
   const hitWidth = Math.max(sceneWidth, 0.72);
   const hitHeight = Math.max(sceneHeight, 0.58);
   const hitDepth = Math.max(depth, 0.18);
-  const isCylinder = component.geometry.primitive === "cylinder";
+  const isCylinder = renderGeometry.primitive === "cylinder";
+  const renderableAsset =
+    assemblyPart?.geometry.kind === "asset" &&
+    geometryAsset &&
+    (geometryAsset.format === "glb" || geometryAsset.format === "gltf")
+      ? geometryAsset
+      : null;
   const [physicalX, physicalY] = physicalOffsets[component.id] ?? [0, 0];
-  const unknown = component.geometry.kind === "placeholder";
+  const unknown =
+    assemblyPart?.fidelity.level === "placeholder" ||
+    component.geometry.kind === "placeholder";
   const exploded = explodedPosition(index, count, explode * 1.6);
   const bench = useMemo(() => benchPosition(index, depth), [depth, index]);
 
@@ -198,13 +482,31 @@ function Part({
         bench.z + manualOffset[1],
       );
     }
+    if (assemblyTransform) {
+      return assemblyTransform.position.clone();
+    }
     if (mode === "assembled") {
       return new Vector3(physicalX, physicalY, index * 0.012);
     }
     return new Vector3(physicalX, physicalY, exploded[2]);
-  }, [bench, exploded, index, manualOffset, mode, physicalX, physicalY]);
+  }, [
+    assemblyTransform,
+    bench,
+    exploded,
+    index,
+    manualOffset,
+    mode,
+    physicalX,
+    physicalY,
+  ]);
 
-  const targetRotation = mode === "bench" ? -Math.PI / 2 : -0.05;
+  const targetRotation = useMemo(() => {
+    if (mode === "bench") return new Euler(-Math.PI / 2, 0, 0);
+    if (assemblyTransform) {
+      return new Euler().setFromQuaternion(assemblyTransform.quaternion);
+    }
+    return new Euler(-0.05, 0.06, 0.02);
+  }, [assemblyTransform, mode]);
   const color = selected
     ? "#e25a38"
     : hovered
@@ -243,26 +545,26 @@ function Part({
     current.position.lerp(targetPosition, alpha);
     current.rotation.x = MathUtils.damp(
       current.rotation.x,
-      targetRotation,
+      targetRotation.x,
       speed,
       delta,
     );
     current.rotation.y = MathUtils.damp(
       current.rotation.y,
-      mode === "bench" ? 0 : 0.06,
+      targetRotation.y,
       speed,
       delta,
     );
     current.rotation.z = MathUtils.damp(
       current.rotation.z,
-      mode === "bench" ? 0 : 0.02,
+      targetRotation.z,
       speed,
       delta,
     );
 
     const moving =
       current.position.distanceToSquared(targetPosition) > 0.000001 ||
-      Math.abs(current.rotation.x - targetRotation) > 0.0005;
+      Math.abs(current.rotation.x - targetRotation.x) > 0.0005;
     if (moving || drag.current) invalidate();
   });
 
@@ -324,11 +626,8 @@ function Part({
     <group
       ref={group}
       position={targetPosition}
-      rotation={[
-        targetRotation,
-        mode === "bench" ? 0 : 0.06,
-        mode === "bench" ? 0 : 0.02,
-      ]}
+      rotation={[targetRotation.x, targetRotation.y, targetRotation.z]}
+      scale={assemblyTransform?.scale}
       visible={!isolated || selected}
       onPointerDown={startDrag}
       onPointerMove={movePart}
@@ -355,7 +654,28 @@ function Part({
           />
         </mesh>
       )}
-      {isCylinder ? (
+      {renderableAsset ? (
+        <Suspense
+          fallback={
+            <RoundedBox
+              args={[sceneWidth, sceneHeight, depth]}
+              radius={Math.min(0.045, depth / 2.4)}
+              smoothness={3}
+            >
+              <meshStandardMaterial
+                color="#7f8b8f"
+                roughness={0.72}
+                wireframe
+              />
+            </RoundedBox>
+          }
+        >
+          <AssetPartMesh
+            asset={renderableAsset}
+            reducedGraphics={reducedGraphics}
+          />
+        </Suspense>
+      ) : isCylinder ? (
         <>
           <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
             <cylinderGeometry
@@ -366,12 +686,15 @@ function Part({
                 28,
               ]}
             />
-            <meshStandardMaterial
-              color={color}
-              roughness={0.2}
-              metalness={0.55}
-              transparent={unknown}
-              opacity={unknown ? 0.68 : 1}
+            <PartSurfaceMaterial
+              profile={materialProfile}
+              fallbackColor={color}
+              fallbackRoughness={0.2}
+              fallbackMetalness={0.55}
+              unknown={unknown}
+              unknownOpacity={0.68}
+              selected={selected}
+              reducedGraphics={reducedGraphics}
             />
           </mesh>
           {component.category === "camera" && (
@@ -393,13 +716,15 @@ function Part({
           castShadow
           receiveShadow
         >
-          <meshStandardMaterial
-            color={color}
-            roughness={component.category === "display" ? 0.18 : 0.58}
-            metalness={component.category === "structure" ? 0.62 : 0.12}
-            transparent={unknown}
-            opacity={unknown ? (hovered ? 0.72 : 0.58) : 1}
-            wireframe={unknown && !selected}
+          <PartSurfaceMaterial
+            profile={materialProfile}
+            fallbackColor={color}
+            fallbackRoughness={component.category === "display" ? 0.18 : 0.58}
+            fallbackMetalness={component.category === "structure" ? 0.62 : 0.12}
+            unknown={unknown}
+            unknownOpacity={hovered ? 0.72 : 0.58}
+            selected={selected}
+            reducedGraphics={reducedGraphics}
           />
           <Edges
             scale={1.002}
@@ -539,6 +864,7 @@ function CameraControls({
 
 export function DeviceViewer({
   components,
+  assembly,
   explode,
   mode,
   arrangeKey,
@@ -551,6 +877,7 @@ export function DeviceViewer({
   onReady,
 }: {
   components: ComponentNode[];
+  assembly?: AssemblyManifest | null;
   explode: number;
   mode: SceneMode;
   arrangeKey: number;
@@ -564,6 +891,35 @@ export function DeviceViewer({
 }) {
   const [partHovered, setPartHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const assemblyParts = useMemo(
+    () => new Map(assembly?.parts.map((part) => [part.id, part]) ?? []),
+    [assembly],
+  );
+  const geometryAssets = useMemo(
+    () => new Map(assembly?.assets.map((asset) => [asset.id, asset]) ?? []),
+    [assembly],
+  );
+  const materialProfiles = useMemo(
+    () =>
+      new Map(
+        assembly?.materialProfiles.map((profile) => [profile.id, profile]) ??
+          [],
+      ),
+    [assembly],
+  );
+  const assemblyTransforms = useMemo(() => {
+    if (!assembly || mode === "bench") return null;
+    const transforms =
+      mode === "exploded"
+        ? deriveExplodedTransforms(assembly, explode)
+        : deriveAssembledTransforms(assembly);
+    return new Map(
+      Array.from(transforms, ([partId, transform]) => [
+        partId,
+        sceneTransformFromMatrix(transform.worldMatrix),
+      ]),
+    );
+  }, [assembly, explode, mode]);
 
   return (
     <div
@@ -585,36 +941,40 @@ export function DeviceViewer({
         onCreated={onReady}
       >
         <color attach="background" args={["#e8e5de"]} />
-        <hemisphereLight args={["#fffdf5", "#8a877f", 1.8]} />
-        <directionalLight
-          castShadow={!reducedGraphics}
-          position={[4, 7, 5]}
-          color="#fffaf0"
-          intensity={2.4}
-          shadow-mapSize={reducedGraphics ? [256, 256] : [1024, 1024]}
-        />
-        <directionalLight
-          position={[-4, 2, 3]}
-          color="#b6c4c7"
-          intensity={0.75}
-        />
+        <StudioLighting reducedGraphics={reducedGraphics} />
 
-        {components.map((component, index) => (
-          <Part
-            key={component.id}
-            component={component}
-            index={index}
-            count={components.length}
-            explode={explode}
-            mode={mode}
-            arrangeKey={arrangeKey}
-            selected={selected === component.id}
-            isolated={isolated}
-            onSelect={onSelect}
-            onHoverChange={setPartHovered}
-            onDragChange={setDragging}
-          />
-        ))}
+        {components.map((component, index) => {
+          const assemblyPart = assemblyParts.get(component.id);
+          const geometryAsset =
+            assemblyPart?.geometry.kind === "asset"
+              ? geometryAssets.get(assemblyPart.geometry.assetId)
+              : undefined;
+          return (
+            <Part
+              key={component.id}
+              component={component}
+              assemblyPart={assemblyPart}
+              geometryAsset={geometryAsset}
+              materialProfile={
+                assemblyPart?.materialProfileId
+                  ? materialProfiles.get(assemblyPart.materialProfileId)
+                  : undefined
+              }
+              assemblyTransform={assemblyTransforms?.get(component.id)}
+              reducedGraphics={reducedGraphics}
+              index={index}
+              count={components.length}
+              explode={explode}
+              mode={mode}
+              arrangeKey={arrangeKey}
+              selected={selected === component.id}
+              isolated={isolated}
+              onSelect={onSelect}
+              onHoverChange={setPartHovered}
+              onDragChange={setDragging}
+            />
+          );
+        })}
 
         <WorkbenchSurface reducedGraphics={reducedGraphics} />
 

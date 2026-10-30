@@ -3,19 +3,30 @@
 import { useEffect, useState } from "react";
 import { GlassPanel } from "@/components/ui/glass-panel";
 import {
+  assemblyManifestSchema,
+  diagnoseAssembly,
+  type AssemblyDiagnostic,
+  type AssemblyManifest,
+} from "@/domain/assembly";
+import { assemblyManifestToProject } from "@/domain/assembly/project-adapter";
+import {
   projectSchema,
   type ComponentNode,
   type Project,
 } from "@/domain/evidence/schema";
 import { resolvePhotoObservations } from "@/domain/evidence/resolve-photo-observations";
 import { inferenceRunSchema, type InferenceRun } from "@/domain/inference/run";
+import { demoAssemblyManifest } from "@/domain/reconstruction/demo-assembly";
 import { demoProject } from "@/domain/reconstruction/demo-project";
-import { PhotoIntake } from "@/features/capture/photo-intake";
 import {
-  ByokSettings,
-  type ByokState,
-} from "@/features/inference/byok-settings";
+  researchSourceSchema,
+  type ResearchSource,
+  type SelectedSource,
+} from "@/domain/research";
+import { SourceManager } from "@/features/research/source-manager";
+import { sourceMatchesDevice } from "@/features/research/device-match";
 import { DeviceSetup } from "@/features/workspace/device-setup";
+import { ProjectWorkflow } from "@/features/workspace/project-workflow";
 import { db } from "@/storage/indexed-db/db";
 import { DeviceViewer, type SceneMode } from "./device-viewer";
 import { EvidenceBadge, EvidenceLegend } from "./evidence-badge";
@@ -34,7 +45,13 @@ function emptyProject(device: Project["device"]): Project {
   };
 }
 
-export function ViewerPanel({ onExit }: { onExit: () => void }) {
+export function ViewerPanel({
+  initialViewSource = "project",
+  onExit,
+}: {
+  initialViewSource?: "project" | "demo";
+  onExit: () => void;
+}) {
   const [explode, setExplode] = useState(0.58);
   const [selected, setSelected] = useState<string | null>(null);
   const [isolated, setIsolated] = useState(false);
@@ -46,18 +63,23 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
   const [resetKey, setResetKey] = useState(0);
   const [sceneReady, setSceneReady] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [captureOpen, setCaptureOpen] = useState(false);
-  const [byokOpen, setByokOpen] = useState(false);
-  const [byokState, setByokState] = useState<ByokState>({
-    configured: false,
-    model: "muse-spark-1.3",
-    verified: false,
-  });
   const [photoCount, setPhotoCount] = useState(0);
   const [activeRun, setActiveRun] = useState<InferenceRun | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [baseProject, setBaseProject] = useState<Project | null>(null);
-  const [viewSource, setViewSource] = useState<"project" | "demo">("project");
+  const [researchSources, setResearchSources] = useState<ResearchSource[]>([]);
+  const [sourcesRestored, setSourcesRestored] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [workflowOpen, setWorkflowOpen] = useState(false);
+  const [assemblyManifest, setAssemblyManifest] =
+    useState<AssemblyManifest | null>(null);
+  const [assemblyProject, setAssemblyProject] = useState<Project | null>(null);
+  const [assemblyDiagnostics, setAssemblyDiagnostics] = useState<
+    readonly AssemblyDiagnostic[]
+  >([]);
+  const [viewSource, setViewSource] = useState<"project" | "demo">(
+    initialViewSource,
+  );
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupError, setSetupError] = useState("");
   const [restoringProject, setRestoringProject] = useState(true);
@@ -67,10 +89,28 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
   const project: Project =
     viewSource === "demo"
       ? demoProject
-      : (resolvedProject ??
+      : (assemblyProject ??
+        resolvedProject ??
         baseProject ??
         emptyProject({ confirmedByUser: false }));
   const isDemo = viewSource === "demo";
+  const activeAssembly = isDemo ? demoAssemblyManifest : assemblyManifest;
+  const hasReconstructedMeshes = Boolean(
+    activeAssembly?.parts.some((part) => part.geometry.kind === "asset"),
+  );
+  const sourceDeviceLabel = [project.device.manufacturer, project.device.model]
+    .filter(Boolean)
+    .join(" ");
+  const approvedSources = researchSources.filter(
+    (source): source is SelectedSource =>
+      source.selection === "selected" &&
+      sourceMatchesDevice(sourceDeviceLabel, source),
+  );
+  const excludedSourceCount = researchSources.filter(
+    (source) =>
+      source.selection === "selected" &&
+      !sourceMatchesDevice(sourceDeviceLabel, source),
+  ).length;
   const component = project.components.find((item) => item.id === selected);
   const componentStatuses: Array<ComponentNode["claims"][number]["status"]> =
     Array.from(
@@ -107,57 +147,111 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
         .equals(PROJECT_ID)
         .filter((asset) => asset.kind === "photo")
         .count(),
+      db.researchSources.where("projectId").equals(PROJECT_ID).toArray(),
+      db.assemblyManifests.where("projectId").equals(PROJECT_ID).toArray(),
     ])
-      .then(([projectRecord, records, savedPhotoCount]) => {
-        if (!active) return;
-        const savedProject = projectSchema.safeParse(projectRecord?.data);
-        const latestRun = records
-          .map((record) => inferenceRunSchema.safeParse(record))
-          .filter((result) => result.success)
-          .map((result) => result.data)
-          .filter(
-            (run) => run.status === "succeeded" && run.resolvedProject !== null,
-          )
-          .sort((left, right) => right.createdAt - left.createdAt)[0];
-        let restoredRun = latestRun;
-        if (latestRun?.observations) {
-          try {
-            restoredRun = {
-              ...latestRun,
-              resolvedProject: resolvePhotoObservations({
-                runId: latestRun.id,
-                analysis: latestRun.observations,
-                photos: latestRun.photos,
-                device: latestRun.device,
-              }),
-            };
-            void db.inferenceRuns.put(restoredRun).catch(() => undefined);
-          } catch {
-            // Keep the validated stored graph if a future resolver cannot
-            // interpret an older observation payload.
+      .then(
+        ([
+          projectRecord,
+          records,
+          savedPhotoCount,
+          sourceRecords,
+          assemblyRecords,
+        ]) => {
+          if (!active) return;
+          const savedProject = projectSchema.safeParse(projectRecord?.data);
+          const latestRun = records
+            .map((record) => inferenceRunSchema.safeParse(record))
+            .filter((result) => result.success)
+            .map((result) => result.data)
+            .filter(
+              (run) =>
+                run.status === "succeeded" && run.resolvedProject !== null,
+            )
+            .sort((left, right) => right.createdAt - left.createdAt)[0];
+          let restoredRun = latestRun;
+          if (latestRun?.observations) {
+            try {
+              restoredRun = {
+                ...latestRun,
+                resolvedProject: resolvePhotoObservations({
+                  runId: latestRun.id,
+                  analysis: latestRun.observations,
+                  photos: latestRun.photos,
+                  device: latestRun.device,
+                }),
+              };
+              void db.inferenceRuns.put(restoredRun).catch(() => undefined);
+            } catch {
+              // Keep the validated stored graph if a future resolver cannot
+              // interpret an older observation payload.
+            }
           }
-        }
-        const manualProjectIsNewer =
-          projectRecord &&
-          restoredRun &&
-          projectRecord.updatedAt >= restoredRun.createdAt;
+          const manualProjectIsNewer =
+            projectRecord &&
+            restoredRun &&
+            projectRecord.updatedAt >= restoredRun.createdAt;
+          const restoredSources = sourceRecords.flatMap((record) => {
+            const parsed = researchSourceSchema.safeParse(record.data);
+            return parsed.success ? [parsed.data] : [];
+          });
+          const latestAssemblyRecord = [...assemblyRecords].sort(
+            (left, right) => right.updatedAt - left.updatedAt,
+          )[0];
+          const restoredManifest = assemblyManifestSchema.safeParse(
+            latestAssemblyRecord?.data,
+          );
+          const contextProject =
+            restoredRun?.resolvedProject && !manualProjectIsNewer
+              ? restoredRun.resolvedProject
+              : savedProject.success
+                ? savedProject.data
+                : emptyProject({ confirmedByUser: false });
 
-        if (savedProject.success) setBaseProject(savedProject.data);
-        if (restoredRun && !manualProjectIsNewer) setActiveRun(restoredRun);
-        setPhotoCount(savedPhotoCount);
-        setSetupOpen(!savedProject.success && !latestRun);
-        setRestoringProject(false);
-      })
+          if (savedProject.success) setBaseProject(savedProject.data);
+          if (restoredRun && !manualProjectIsNewer) setActiveRun(restoredRun);
+          setResearchSources(restoredSources);
+          setSourcesRestored(true);
+          if (restoredManifest.success) {
+            try {
+              setAssemblyManifest(restoredManifest.data);
+              setAssemblyDiagnostics(diagnoseAssembly(restoredManifest.data));
+              setAssemblyProject(
+                assemblyManifestToProject(restoredManifest.data, {
+                  projectId: PROJECT_ID,
+                  device: contextProject.device,
+                  evidence: contextProject.evidence,
+                }),
+              );
+            } catch {
+              // A stale assembly never replaces a valid evidence project.
+            }
+          }
+          setPhotoCount(savedPhotoCount);
+          setSetupOpen(
+            initialViewSource !== "demo" && !savedProject.success && !latestRun,
+          );
+          if (
+            initialViewSource !== "demo" &&
+            (savedProject.success || latestRun) &&
+            !restoredManifest.success
+          ) {
+            setWorkflowOpen(true);
+          }
+          setRestoringProject(false);
+        },
+      )
       .catch(() => {
         if (active) {
-          setSetupOpen(true);
+          setSourcesRestored(true);
+          setSetupOpen(initialViewSource !== "demo");
           setRestoringProject(false);
         }
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [initialViewSource]);
 
   useEffect(() => {
     if (!sceneReady) return;
@@ -166,18 +260,34 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
   }, [sceneReady]);
 
   useEffect(() => {
-    if (!captureOpen && !byokOpen) return;
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setCaptureOpen(false);
-        setByokOpen(false);
-      }
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [byokOpen, captureOpen]);
+    if (!sourcesRestored) return;
+    const timer = window.setTimeout(() => {
+      void db
+        .transaction("rw", db.researchSources, async () => {
+          const existingIds = await db.researchSources
+            .where("projectId")
+            .equals(PROJECT_ID)
+            .primaryKeys();
+          if (existingIds.length > 0) {
+            await db.researchSources.bulkDelete(existingIds);
+          }
+          if (researchSources.length > 0) {
+            const updatedAt = Date.now();
+            await db.researchSources.bulkPut(
+              researchSources.map((source) => ({
+                id: source.id,
+                projectId: PROJECT_ID,
+                selection: source.selection,
+                updatedAt,
+                data: source,
+              })),
+            );
+          }
+        })
+        .catch(() => undefined);
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [researchSources, sourcesRestored]);
 
   function selectComponent(id: string) {
     setSelected(id || null);
@@ -236,27 +346,37 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
     setArrangeKey((value) => value + 1);
   }
 
-  function handleRunCompleted(run: InferenceRun) {
-    setActiveRun(run);
-    setAnalysisOpen(true);
-    setViewSource("project");
-    setSelected(null);
-    setIsolated(false);
-    setSceneMode("bench");
-    setPartsOpen(true);
-  }
-
   async function saveBaseProject(nextProject: Project, title: string) {
     try {
       const updatedAt = Date.now();
-      await db.projects.put({
-        id: PROJECT_ID,
-        title,
-        updatedAt,
-        data: nextProject,
-      });
+      await db.transaction(
+        "rw",
+        db.projects,
+        db.researchSources,
+        db.assemblyManifests,
+        async () => {
+          await db.projects.put({
+            id: PROJECT_ID,
+            title,
+            updatedAt,
+            data: nextProject,
+          });
+          await db.researchSources
+            .where("projectId")
+            .equals(PROJECT_ID)
+            .delete();
+          await db.assemblyManifests
+            .where("projectId")
+            .equals(PROJECT_ID)
+            .delete();
+        },
+      );
       setBaseProject(nextProject);
       setActiveRun(null);
+      setResearchSources([]);
+      setAssemblyManifest(null);
+      setAssemblyProject(null);
+      setAssemblyDiagnostics([]);
       setViewSource("project");
       setSetupOpen(false);
       setSetupError("");
@@ -274,7 +394,9 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
 
   function chooseKnownDevice(device: Project["device"]) {
     const title = [device.manufacturer, device.model].filter(Boolean).join(" ");
-    void saveBaseProject(emptyProject(device), title);
+    void saveBaseProject(emptyProject(device), title).then((saved) => {
+      if (saved) setWorkflowOpen(true);
+    });
   }
 
   function chooseUnknownDevice() {
@@ -282,8 +404,48 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
       emptyProject({ confirmedByUser: false }),
       "Unidentified device",
     ).then((saved) => {
-      if (saved) setCaptureOpen(true);
+      if (saved) setWorkflowOpen(true);
     });
+  }
+
+  function prepareReconstruction() {
+    setSourcesOpen(false);
+    setWorkflowOpen(true);
+  }
+
+  function applyAssemblyManifest(
+    manifest: AssemblyManifest,
+    diagnostics: readonly AssemblyDiagnostic[],
+    activateViewer = true,
+  ) {
+    const contextProject =
+      resolvedProject ?? baseProject ?? emptyProject(project.device);
+    const nextProject = assemblyManifestToProject(manifest, {
+      projectId: PROJECT_ID,
+      device: contextProject.device,
+      evidence: contextProject.evidence,
+    });
+    setAssemblyManifest(manifest);
+    setAssemblyProject(nextProject);
+    setAssemblyDiagnostics(diagnostics);
+    setViewSource("project");
+    setWorkflowOpen(false);
+    setSelected(null);
+    setIsolated(false);
+    if (activateViewer) {
+      setSceneMode("assembled");
+      setPartsOpen(true);
+    } else {
+      setWorkflowOpen(true);
+    }
+    void db.assemblyManifests
+      .put({
+        id: manifest.id,
+        projectId: PROJECT_ID,
+        updatedAt: Date.now(),
+        data: manifest,
+      })
+      .catch(() => undefined);
   }
 
   const projectTitle = isDemo
@@ -327,38 +489,27 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
           </small>
         </div>
         <div className="viewer-topbar__actions">
-          <button
-            type="button"
-            className={`model-button ${byokState.verified ? "is-connected" : ""}`}
-            onClick={() => setByokOpen(true)}
-            title={
-              byokState.configured
-                ? byokState.model
-                : "Configure Meta Model API"
-            }
-          >
-            <i aria-hidden="true" />
-            {byokState.verified ? "AI connected" : "Configure AI"}
-          </button>
-          <button
-            type="button"
-            className="add-views-button"
-            onClick={() => setCaptureOpen(true)}
-          >
-            <span>＋</span> Add views
-            {photoCount > 0 && <b>{photoCount}</b>}
-          </button>
+          {!isDemo && (
+            <button
+              type="button"
+              className="model-button"
+              onClick={() => setWorkflowOpen(true)}
+              title="Open the Meta AI reconstruction workflow"
+            >
+              <i aria-hidden="true" />
+              Meta reconstruction
+            </button>
+          )}
           <details className="viewer-menu">
             <summary>Menu</summary>
             <div>
-              <button type="button" onClick={() => setCaptureOpen(true)}>
-                Add views
-              </button>
+              {!isDemo && (
+                <button type="button" onClick={() => setWorkflowOpen(true)}>
+                  Open Meta reconstruction
+                </button>
+              )}
               <button type="button" onClick={openEvidence}>
                 Evidence levels
-              </button>
-              <button type="button" onClick={() => setByokOpen(true)}>
-                Configure Meta Model API
               </button>
               <button type="button" onClick={() => setSetupOpen(true)}>
                 {baseProject ? "Change device" : "Start a project"}
@@ -385,6 +536,7 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
 
       <DeviceViewer
         components={project.components}
+        assembly={activeAssembly}
         explode={explode}
         mode={sceneMode}
         arrangeKey={arrangeKey}
@@ -416,9 +568,11 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
           <span className="scene-status__path">
             {isDemo
               ? "Synthetic demo fixture"
-              : resolvedProject
-                ? "Evidence-resolved project"
-                : "Evidence project"}
+              : assemblyProject
+                ? `${hasReconstructedMeshes ? "Meta reconstructed meshes" : "Estimated assembly"} · ${assemblyDiagnostics.length} spatial warning${assemblyDiagnostics.length === 1 ? "" : "s"}`
+                : resolvedProject
+                  ? "Evidence-resolved project"
+                  : "Evidence project"}
           </span>
           <h2 id="viewer-title">
             {project.components.length === 0
@@ -514,63 +668,15 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
             <span className="panel-kicker">Project ready</span>
             <h3>{projectTitle}</h3>
             <p>
-              Components appear only after evidence has been collected and
-              resolved. Choose the next useful step.
+              Identity, sources, photos and reconstruction are now grouped in
+              one guided workspace.
             </p>
-            <ol className="project-guide-steps">
-              <li className="is-complete">
-                <span>1</span>
-                <div>
-                  <strong>Device context</strong>
-                  <small>
-                    {project.device.confirmedByUser
-                      ? "Identity entered by you"
-                      : "Identity intentionally left unknown"}
-                  </small>
-                </div>
-                <b>✓</b>
-              </li>
-              <li className={photoCount >= 3 ? "is-complete" : ""}>
-                <span>2</span>
-                <div>
-                  <strong>Add visual evidence</strong>
-                  <small>
-                    {photoCount > 0
-                      ? `${photoCount} local photo${photoCount > 1 ? "s" : ""} available`
-                      : "Whole object, labels, sides and connectors"}
-                  </small>
-                </div>
-                <button type="button" onClick={() => setCaptureOpen(true)}>
-                  {photoCount > 0 ? "Review" : "Add photos"}
-                </button>
-              </li>
-              <li className={activeRun ? "is-complete" : ""}>
-                <span>3</span>
-                <div>
-                  <strong>Resolve observations</strong>
-                  <small>
-                    {photoCount < 3
-                      ? "At least three photos are needed"
-                      : byokState.verified
-                        ? "Connection ready; approve the analysis"
-                        : "Connect your own model key, then approve the transfer"}
-                  </small>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setByokOpen(true)}
-                  disabled={photoCount < 3}
-                >
-                  {byokState.verified ? "Analyze" : "Configure AI"}
-                </button>
-              </li>
-            </ol>
             <button
               type="button"
               className="project-guide-edit"
-              onClick={() => setSetupOpen(true)}
+              onClick={() => setWorkflowOpen(true)}
             >
-              Edit device identity
+              Open Meta reconstruction →
             </button>
           </GlassPanel>
         )}
@@ -704,77 +810,22 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
         )}
       </div>
 
-      {captureOpen && (
-        <div
-          className="capture-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="capture-title"
-        >
-          <button
-            className="capture-backdrop"
-            onClick={() => setCaptureOpen(false)}
-            aria-label="Close"
-          />
-          <GlassPanel
-            className="capture-drawer"
-            reducedGraphics={reducedGraphics}
-          >
-            <div className="panel-heading">
-              <div>
-                <span className="panel-kicker">New observations</span>
-                <h3 id="capture-title">Add views</h3>
-              </div>
-              <button
-                type="button"
-                className="panel-close"
-                onClick={() => setCaptureOpen(false)}
-                aria-label="Close"
-              >
-                ×
-              </button>
-            </div>
-            <p className="capture-drawer__intro">
-              Add 3 to 8 clear views of the device, its sides, and its
-              connectors.
-            </p>
-            <PhotoIntake onCountChange={setPhotoCount} />
-            <div className="capture-next-step">
-              <div>
-                <strong>Next: resolve visible observations</strong>
-                <small>
-                  {photoCount >= 3
-                    ? "You have enough views to continue. You will review consent before anything leaves this browser."
-                    : "Add at least three complementary views to continue."}
-                </small>
-              </div>
-              <button
-                type="button"
-                disabled={photoCount < 3}
-                onClick={() => {
-                  setCaptureOpen(false);
-                  setByokOpen(true);
-                }}
-              >
-                Continue to analysis →
-              </button>
-            </div>
-          </GlassPanel>
-        </div>
+      {workflowOpen && !isDemo && !setupOpen && (
+        <ProjectWorkflow
+          projectId={PROJECT_ID}
+          deviceLabel={projectTitle}
+          selectedSources={approvedSources}
+          excludedSourceCount={excludedSourceCount}
+          photoCount={photoCount}
+          observedParts={activeRun?.observations?.observations ?? []}
+          onPhotoCountChange={setPhotoCount}
+          onManageSources={() => {
+            setSourcesOpen(true);
+          }}
+          onApplyManifest={applyAssemblyManifest}
+          onClose={() => setWorkflowOpen(false)}
+        />
       )}
-
-      <ByokSettings
-        open={byokOpen}
-        onClose={() => setByokOpen(false)}
-        onStateChange={setByokState}
-        photoCount={photoCount}
-        device={
-          isDemo
-            ? (baseProject?.device ?? { confirmedByUser: false })
-            : project.device
-        }
-        onRunCompleted={handleRunCompleted}
-      />
 
       {!restoringProject && setupOpen && (
         <DeviceSetup
@@ -782,13 +833,28 @@ export function ViewerPanel({ onExit }: { onExit: () => void }) {
           existingDevice={baseProject?.device}
           photoCount={photoCount}
           error={setupError}
-          onClose={() => setSetupOpen(false)}
+          onClose={() => {
+            setSetupOpen(false);
+            if (baseProject && !isDemo) setWorkflowOpen(true);
+          }}
           onKnownDevice={chooseKnownDevice}
           onUnknownDevice={chooseUnknownDevice}
           onOpenDemo={() => {
             setViewSource("demo");
             setSetupOpen(false);
           }}
+        />
+      )}
+      {sourcesOpen && !isDemo && (
+        <SourceManager
+          deviceLabel={projectTitle}
+          currentSources={researchSources}
+          onSourcesChange={setResearchSources}
+          onClose={() => {
+            setSourcesOpen(false);
+            setWorkflowOpen(true);
+          }}
+          onPrepareReconstruction={prepareReconstruction}
         />
       )}
       {analysis && analysisOpen && (

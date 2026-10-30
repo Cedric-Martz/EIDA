@@ -142,8 +142,8 @@ export function DeviceSetup({
               </span>
               <strong>I know the device</strong>
               <small>
-                Enter a manufacturer and model. Photos stay optional until
-                visual evidence is needed.
+                Enter a manufacturer and model, then review repair guides and
+                technical sources before any part is proposed.
               </small>
               <b>Enter identity →</b>
             </button>
@@ -293,14 +293,14 @@ export function DeviceSetup({
             <p>
               Suggestions only help with data entry. Your selection is stored as
               user-confirmed context and does not prove any component, material
-              or dimension.
+              or dimension. The next step searches for reviewable sources.
             </p>
             <button
               type="submit"
               className="project-setup-primary"
               disabled={!query.trim()}
             >
-              Create evidence project
+              Create project and find sources
             </button>
           </form>
         )}
