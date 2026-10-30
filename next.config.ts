@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const isDevelopment = process.env.NODE_ENV === "development";
 const isGitHubPages = process.env.GITHUB_PAGES === "true";
+const pagesRepository = process.env.GITHUB_REPOSITORY?.split("/")[1] ?? "EIDA";
+const pagesBasePath = isGitHubPages ? `/${pagesRepository}` : undefined;
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -12,6 +14,8 @@ const nextConfig: NextConfig = {
   distDir: isDevelopment ? ".next-dev" : ".next",
   output: isGitHubPages ? "export" : undefined,
   trailingSlash: isGitHubPages,
+  basePath: pagesBasePath,
+  assetPrefix: pagesBasePath,
   images: {
     unoptimized: true,
   },
