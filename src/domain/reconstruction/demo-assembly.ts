@@ -65,7 +65,9 @@ export const demoAssemblyManifest: AssemblyManifest = {
         kind: "parametric",
         primitive: "rounded_box",
         dimensionsMm: [243, 170, 4],
-        cornerRadiusMm: 8,
+        // RoundedBox bevels all three axes, so the radius must also fit the
+        // thin display depth (4 mm).
+        cornerRadiusMm: 1.5,
       },
       fidelity: {
         level: "estimated",
@@ -89,7 +91,7 @@ export const demoAssemblyManifest: AssemblyManifest = {
         kind: "parametric",
         primitive: "rounded_box",
         dimensionsMm: [243, 170, 3],
-        cornerRadiusMm: 8,
+        cornerRadiusMm: 1,
       },
       fidelity: {
         level: "estimated",
@@ -113,7 +115,7 @@ export const demoAssemblyManifest: AssemblyManifest = {
         kind: "parametric",
         primitive: "rounded_box",
         dimensionsMm: [85, 65, 2],
-        cornerRadiusMm: 3,
+        cornerRadiusMm: 0.75,
       },
       fidelity: {
         level: "estimated",
@@ -183,7 +185,7 @@ export const demoAssemblyManifest: AssemblyManifest = {
         kind: "parametric",
         primitive: "rounded_box",
         dimensionsMm: [243, 170, 5],
-        cornerRadiusMm: 8,
+        cornerRadiusMm: 2,
       },
       fidelity: {
         level: "estimated",

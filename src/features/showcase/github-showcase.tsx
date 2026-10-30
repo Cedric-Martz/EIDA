@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { demoAssemblyManifest } from "@/domain/reconstruction/demo-assembly";
 import { demoProject } from "@/domain/reconstruction/demo-project";
 import type { SceneMode } from "@/features/viewer/device-viewer";
@@ -31,6 +31,146 @@ const steps = [
   ],
 ] as const;
 
+const storyChapters = [
+  {
+    number: "01",
+    eyebrow: "Lay out the evidence",
+    title: "Everything starts on the bench.",
+    body: "Approved sources, photographs and uncertain observations stay visible before any geometry is proposed.",
+  },
+  {
+    number: "02",
+    eyebrow: "Separate the claims",
+    title: "Pull every layer into view.",
+    body: "The exploded view makes the relationship between display, frame, electronics, battery and housing inspectable.",
+  },
+  {
+    number: "03",
+    eyebrow: "Inspect the gaps",
+    title: "Unknown is a useful result.",
+    body: "Placeholder geometry remains visually distinct. An estimate never silently becomes measured CAD.",
+  },
+  {
+    number: "04",
+    eyebrow: "Rebuild with context",
+    title: "Bring the assembly home.",
+    body: "Every part returns to its inferred pose with provenance and fidelity still attached.",
+  },
+] as const;
+
+function ScrollAssemblyStory() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const frameRef = useRef<number | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => setReducedMotion(media.matches);
+    updatePreference();
+    media.addEventListener("change", updatePreference);
+    return () => media.removeEventListener("change", updatePreference);
+  }, []);
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+
+    const scrollRoot = section.closest(`.${styles.page}`);
+    if (!(scrollRoot instanceof HTMLElement)) return;
+
+    const update = () => {
+      frameRef.current = null;
+      const bounds = section.getBoundingClientRect();
+      const range = Math.max(bounds.height - window.innerHeight, 1);
+      const next = Math.min(1, Math.max(0, -bounds.top / range));
+      setProgress((current) =>
+        Math.abs(current - next) > 0.002 ? next : current,
+      );
+    };
+    const scheduleUpdate = () => {
+      if (frameRef.current === null) {
+        frameRef.current = window.requestAnimationFrame(update);
+      }
+    };
+
+    update();
+    scrollRoot.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      scrollRoot.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    };
+  }, []);
+
+  const mode: SceneMode =
+    progress < 0.12 ? "bench" : progress > 0.86 ? "assembled" : "exploded";
+  const explode = reducedMotion
+    ? progress > 0.7
+      ? 0
+      : 0.72
+    : progress < 0.12
+      ? 0
+      : progress > 0.78
+        ? Math.max(0, 1 - (progress - 0.78) / 0.22)
+        : Math.min(1, (progress - 0.12) / 0.42);
+  const activeChapter = Math.min(
+    storyChapters.length - 1,
+    Math.floor(progress * storyChapters.length),
+  );
+
+  return (
+    <section className={styles.story} id="story" ref={sectionRef}>
+      <div className={styles.storySticky}>
+        <div className={styles.storyHeading}>
+          <p className={styles.eyebrow}>Scroll to reconstruct</p>
+          <p>
+            <span>{String(activeChapter + 1).padStart(2, "0")}</span>
+            <span>/ {String(storyChapters.length).padStart(2, "0")}</span>
+          </p>
+        </div>
+        <div className={styles.storyViewer}>
+          <DeviceViewer
+            components={demoProject.components}
+            assembly={demoAssemblyManifest}
+            explode={explode}
+            mode={mode}
+            arrangeKey={0}
+            selected={null}
+            isolated={false}
+            showGrid={mode === "bench"}
+            reducedGraphics={reducedMotion}
+            resetKey={0}
+            onSelect={() => undefined}
+            onReady={() => undefined}
+          />
+          <div className={styles.storyHud}>
+            <span>EIDA / SYNTHETIC FIXTURE</span>
+            <span>{mode.toUpperCase()}</span>
+          </div>
+        </div>
+        <div className={styles.storyProgress} aria-hidden="true">
+          <i style={{ transform: `scaleX(${progress})` }} />
+        </div>
+      </div>
+      <div className={styles.storyChapters}>
+        {storyChapters.map((chapter, index) => (
+          <article
+            key={chapter.number}
+            className={index === activeChapter ? styles.storyChapterActive : ""}
+          >
+            <span>{chapter.number}</span>
+            <p>{chapter.eyebrow}</p>
+            <h2>{chapter.title}</h2>
+            <p>{chapter.body}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function GithubShowcase() {
   const [explode, setExplode] = useState(0.58);
   const [mode, setMode] = useState<SceneMode>("exploded");
@@ -44,6 +184,7 @@ export function GithubShowcase() {
         </a>
         <nav aria-label="Documentation">
           <a href="#process">Process</a>
+          <a href="#story">3D story</a>
           <a href="#guide">Guide</a>
           <a href="#limits">Limits</a>
           <a className={styles.headerCta} href="#demo">
@@ -123,6 +264,8 @@ export function GithubShowcase() {
           ))}
         </div>
       </section>
+
+      <ScrollAssemblyStory />
 
       <section className={styles.demoSection} id="demo">
         <div className={styles.demoIntro}>
