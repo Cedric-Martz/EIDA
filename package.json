@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
     "build": "next build",
+    "build:pages": "bash scripts/build-pages.sh",
     "start": "next start --hostname 0.0.0.0 --port 3000",
     "lint": "eslint .",
     "format": "prettier --write .",
