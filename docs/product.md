@@ -6,9 +6,9 @@ From multiple photographs and selected technical documents, create an interactiv
 
 ## Current usable slice
 
-The static interface opens on a presentation page, then starts a real evidence project instead of silently loading synthetic parts. The user can confirm a known manufacturer/model or leave the identity unknown and begin with photographs. The workspace explains the next step, accepts 3–8 browser-stored photos, and exposes AI configuration only as the continuation of that evidence flow. A confirmed identity is context, never automatic proof of a component.
+The local interface opens on a presentation page, then starts a real evidence project instead of silently loading synthetic parts. The user discovers and reviews public repair sources, excludes mismatched variants, confirms a known manufacturer/model or leaves the identity unknown, and adds 3–8 browser-stored photos. The launch first extracts the approved web pages, dimensions, images and technical-file links; it then gives that snapshot plus up to six photos to Muse, sends one accepted part at a time to SAM 3.1, and builds/validates local GLB silhouettes. A confirmed identity is context, never automatic proof of a component.
 
-After a BYOK connection test and explicit per-action consent, exactly three photos can be analyzed by Meta Model API. Validated observations are resolved into a local evidence graph with estimated primitives or unknown placeholders. The viewer restores the latest project or successful run and keeps the six-part fixture behind a clearly labelled demo action. On the workbench, enlarged hit targets, immediate pointer tracking, temporary camera locking and bounded placement improve part manipulation on pointer and touch devices. Controlled-document import, online evidence discovery and SAM segmentation are not currently implemented.
+After a BYOK connection test and explicit per-run consent, the approved source snapshot and up to six photos can be processed through the local Meta proxy. Muse inventory and SAM masks are validated before local geometry is generated. The viewer restores the latest project or successful run and keeps the six-part fixture behind a clearly labelled demo action. On the workbench, enlarged hit targets, immediate pointer tracking, temporary camera locking and bounded placement improve part manipulation on pointer and touch devices.
 
 ## Primary user
 
@@ -21,13 +21,26 @@ Samsung Galaxy Tab 4 SM-T530. This is a **reference model**, not a claim that al
 ## MVP acceptance scenario
 
 1. Capture 3–8 images on Galaxy A32 5G.
-2. Confirm model identity.
-3. Import/approve a technical source.
-4. Obtain a structured component proposal from Muse Spark.
-5. Show at least five independently manipulable 3D objects.
-6. Show evidence and uncertainty for each component.
-7. Request another photo when an important claim cannot be supported.
-8. Offer safe, non-specific reuse/collection guidance.
+2. Confirm model identity or leave it unknown.
+3. Discover, review and approve public repair sources.
+4. Extract their readable text, dimensions, images and technical-file links.
+5. Obtain a structured, evidence-grounded component proposal from Muse Spark.
+6. Obtain SAM masks for visible, segmentable parts.
+7. Show independently manipulable estimated 3D silhouettes.
+8. Show evidence, source links, dimensions and uncertainty for each component.
+9. Keep unsupported depth, hidden geometry and materials explicitly estimated/unknown.
+
+## Material and service constraints
+
+The project is intentionally built without paid infrastructure. It does not pay for a search provider, hosted GPU, photogrammetry service, CAD conversion service, database, object storage, queue or production monitoring. Live Muse/SAM usage depends on credits and access supplied by the user or hackathon account. The local machine performs extraction orchestration, contour processing, GLB generation, validation, storage and rendering.
+
+## Current limitations
+
+- HTML/text extraction is supported; PDF text, OCR, CAD parsing, technical-file download and automatic multi-view registration are not.
+- A complete documented dimension can set scale, but image contours cannot establish depth, hidden surfaces, exact placement, material, fastener geometry or mechanical fit.
+- The current workflow is sequential and bounded to six photos and ten inventory items. Failed provider calls do not become synthetic success.
+- The local server has no accounts, shared quota, durable backend persistence or production-grade multi-user isolation.
+- GitHub Pages is a documentation and synthetic-demo target only, not the live reconstruction deployment.
 
 ## Explicit non-goals
 
@@ -39,4 +52,4 @@ Evidence-aware reconstruction can reduce unsupported component claims at compara
 
 ## Cut order
 
-Drop automatic web discovery, advanced mesh generation, GLB export, and recovery location lookup before cutting evidence display or the working 3D viewer.
+Drop advanced mesh generation, GLB export and recovery location lookup before cutting evidence display or the working 3D viewer. Keep the bounded evidence extraction and local viewer usable without paid services.

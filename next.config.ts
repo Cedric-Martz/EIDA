@@ -1,13 +1,5 @@
 import type { NextConfig } from "next";
 
-const repositoryName = process.env.GITHUB_REPOSITORY?.split("/")[1];
-const isGitHubPagesBuild = process.env.GITHUB_ACTIONS === "true";
-const isUserOrOrganizationPage =
-  repositoryName?.endsWith(".github.io") ?? false;
-const basePath =
-  isGitHubPagesBuild && repositoryName && !isUserOrOrganizationPage
-    ? `/${repositoryName}`
-    : "";
 const isDevelopment = process.env.NODE_ENV === "development";
 
 const nextConfig: NextConfig = {
@@ -17,10 +9,6 @@ const nextConfig: NextConfig = {
   // separate directory prevents a concurrent build from invalidating chunks
   // already referenced by an open development page.
   distDir: isDevelopment ? ".next-dev" : ".next",
-  output: "export",
-  trailingSlash: true,
-  basePath,
-  assetPrefix: basePath,
   images: {
     unoptimized: true,
   },

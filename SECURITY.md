@@ -14,10 +14,10 @@ Do not open a public issue containing API keys, private photographs, sensitive d
 
 ## Controls
 
-- The current static build contains no shared provider key or server route. An informed visitor can explicitly trigger a paid three-photo call using their own key after a separate consent action.
+- The live local build contains no shared provider key in the browser bundle. An informed visitor can explicitly trigger a provider call using their own key after a separate consent action; GitHub Pages must remain static and contain no live provider route.
 - BYOK credentials are held in memory by default and may be stored in `sessionStorage` only after an explicit user choice. They are never logged or included in project exports.
 - No model-provider calls run in tests or CI; the adapter uses injected network fakes.
-- Maintainer-owned or shared provider credentials must remain in a separately protected server environment and must never use a `NEXT_PUBLIC_` variable.
+- Maintainer-owned or shared provider credentials must remain in a separately protected server environment and must never use a `NEXT_PUBLIC_` variable. The current local server is not a production multi-user backend.
 - Future document parsers must limit file types and sizes and isolate untrusted content.
 - Never log images, raw documents, credentials, or complete model responses containing personal data.
 - Do not follow repair advice involving battery puncture, swelling, heat, or energized circuits.
@@ -25,4 +25,4 @@ Do not open a public issue containing API keys, private photographs, sensitive d
 
 ## Before any public deployment
 
-Before offering a shared-key service, implement real authentication, per-user server-enforced quotas, rate limiting, upload size limits, CSRF/origin protections, audit of Meta data retention, and abuse monitoring. A public GitHub repository is **not** a shared-key production deployment. A browser-only BYOK prototype transfers cost and key control to the visitor but still requires explicit media consent and clear provider terms.
+Before offering a shared-key service, implement real authentication, per-user server-enforced quotas, rate limiting, upload size limits, CSRF/origin protections, audit of Meta data retention, and abuse monitoring. A public GitHub repository is **not** a shared-key production deployment. The current local path intentionally does not pay for search, GPU, database or storage services; it transfers provider-credit and key control to the visitor and still requires explicit media consent and clear provider terms.

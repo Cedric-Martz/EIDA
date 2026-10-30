@@ -17,7 +17,7 @@ afterEach(async () => {
 });
 
 describe("IndexedDB schema migration", () => {
-  it("adds inference runs in version 2 without dropping version 1 records", async () => {
+  it("adds research and assembly stores without dropping version 1 records", async () => {
     const legacy = new Dexie(DATABASE_NAME);
     legacy.version(1).stores({
       projects: "id,updatedAt",
@@ -45,8 +45,11 @@ describe("IndexedDB schema migration", () => {
 
     await db.open();
 
-    expect(DATABASE_VERSION).toBe(2);
+    expect(DATABASE_VERSION).toBe(4);
     expect(DATABASE_STORES.inferenceRuns).toContain("projectId");
+    expect(DATABASE_STORES.researchSources).toContain("selection");
+    expect(DATABASE_STORES.assemblyManifests).toContain("projectId");
+    expect(DATABASE_STORES.metaJobs).toContain("status");
     expect(await db.projects.get("legacy-project")).toMatchObject({
       title: "Legacy project",
     });
@@ -55,5 +58,8 @@ describe("IndexedDB schema migration", () => {
       kind: "photo",
     });
     expect(db.tables.map((table) => table.name)).toContain("inferenceRuns");
+    expect(db.tables.map((table) => table.name)).toContain("researchSources");
+    expect(db.tables.map((table) => table.name)).toContain("assemblyManifests");
+    expect(db.tables.map((table) => table.name)).toContain("metaJobs");
   });
 });

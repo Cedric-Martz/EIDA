@@ -13,7 +13,18 @@ npm run check
 npm run dev
 ```
 
-Commit `package-lock.json` after installation. `.env.local` is ignored. The current static build does not read provider credentials or expose an inference probe.
+Commit `package-lock.json` after installation. `.env.local` is ignored. `MODEL_API_KEY` is read only by the local Next.js server; never use a `NEXT_PUBLIC_` variable for it.
+
+## What runs where
+
+The live local workflow is:
+
+1. Browser stores photos and project state in IndexedDB.
+2. The local Next.js server fetches only user-approved public HTTPS sources and extracts bounded HTML/text evidence.
+3. The server proxies Muse inventory and SAM 3.1 requests with the environment key or a session key.
+4. The browser builds silhouettes, GLB assets, assembly diagnostics and the viewer locally.
+
+No paid search, GPU, database, queue, object storage or external CAD service is required. The optional `services/` directories are contracts/research material, not prerequisites.
 
 ## Create GitHub repo
 
@@ -33,4 +44,8 @@ Create one project manually, fields: Status, Priority, Milestone, Area, Estimate
 
 ## Smartphone testing
 
-For Galaxy A32 5G, connect to an HTTPS dev origin trusted by the phone. A plain LAN HTTP URL may not allow camera capture. Never expose a future paid endpoint publicly without authentication, quotas and rate limits.
+For Galaxy A32 5G, connect to an HTTPS dev origin trusted by the phone. A plain LAN HTTP URL may not allow camera capture. Never expose the local server publicly: it has no user accounts, durable quota enforcement or multi-user isolation.
+
+## GitHub Pages
+
+GitHub Pages is suitable for a separate static documentation and synthetic 3D demo build. It cannot safely run the live workflow because Pages cannot protect `MODEL_API_KEY` or host the server routes used for source extraction, Muse and SAM. The current workflow validates the repository; publishing the static showcase requires a dedicated static entry point and fixture assets.

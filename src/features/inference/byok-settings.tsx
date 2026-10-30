@@ -258,8 +258,8 @@ export function ByokSettings({
       <section className="byok-dialog glass-panel">
         <div className="panel-heading">
           <div>
-            <span className="panel-kicker">AI analysis</span>
-            <h3 id={titleId}>Analyze your device photos</h3>
+            <span className="panel-kicker">Optional Meta preview</span>
+            <h3 id={titleId}>Create a quick visual inventory</h3>
           </div>
           <button
             type="button"
@@ -272,8 +272,10 @@ export function ByokSettings({
         </div>
 
         <p className="byok-intro">
-          Connect your own Meta API key, check it once, then start the analysis.
-          EIDA has no server and never stores this key in the project.
+          Connect your own Meta Model API key for a semantic preview. This
+          identifies visible parts; real meshes are produced separately by the
+          SAM 3D reconstruction workflow. EIDA never stores this key in the
+          project.
         </p>
 
         <section className="byok-step">
@@ -381,7 +383,7 @@ export function ByokSettings({
           <div className="byok-step__heading">
             <span>2</span>
             <div>
-              <strong>Analyze the device</strong>
+              <strong>Inventory visible parts</strong>
               <small>
                 {missingPhotoCount > 0
                   ? `Add ${missingPhotoCount} more photo${missingPhotoCount > 1 ? "s" : ""} to continue.`
@@ -424,7 +426,7 @@ export function ByokSettings({
             disabled={!readyToAnalyze || analyzing}
           >
             <span aria-hidden="true">✦</span>
-            {analyzing ? "Analyzing photos…" : "Analyze device"}
+            {analyzing ? "Analyzing photos…" : "Create visual inventory"}
           </button>
           <p className="byok-disclosure">
             Only this button uploads the three selected photos. Approval resets

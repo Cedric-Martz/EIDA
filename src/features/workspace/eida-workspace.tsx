@@ -31,7 +31,9 @@ const ViewerPanel = dynamic(
 
 export function EidaWorkspace() {
   const [hydrated, setHydrated] = useState(false);
-  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [workspaceSource, setWorkspaceSource] = useState<
+    "project" | "demo" | null
+  >(null);
 
   useEffect(() => {
     setHydrated(true);
@@ -41,16 +43,26 @@ export function EidaWorkspace() {
   // prevents browser-only state restored by future features from changing the
   // root tree before React has attached its event handlers.
   if (!hydrated) {
-    return <EidaLanding onEnter={() => undefined} />;
+    return (
+      <EidaLanding onEnter={() => undefined} onOpenDemo={() => undefined} />
+    );
   }
 
-  if (!workspaceOpen) {
-    return <EidaLanding onEnter={() => setWorkspaceOpen(true)} />;
+  if (!workspaceSource) {
+    return (
+      <EidaLanding
+        onEnter={() => setWorkspaceSource("project")}
+        onOpenDemo={() => setWorkspaceSource("demo")}
+      />
+    );
   }
 
   return (
     <main className="browser-workbench" id="top">
-      <ViewerPanel onExit={() => setWorkspaceOpen(false)} />
+      <ViewerPanel
+        initialViewSource={workspaceSource}
+        onExit={() => setWorkspaceSource(null)}
+      />
     </main>
   );
 }

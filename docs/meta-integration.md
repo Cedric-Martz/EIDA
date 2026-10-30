@@ -7,34 +7,51 @@ Official docs: https://dev.meta.ai/docs/overview and https://dev.meta.ai/docs/mo
 - Muse Spark 1.3: `muse-spark-1.3`; both Responses and Chat Completions are supported. This single-shot slice uses `POST /chat/completions`.
 - SAM 3.1: `sam-3.1`, image segmentation through Responses API; masks and boxes.
 
-## Current status
+## Current path
 
-The static application includes browser-side BYOK configuration and a read-only connection test against `GET /models`. The key remains in React memory by default. At the user's request it may be kept in `sessionStorage` until the browser session ends. It is never included in the source, build, logs, IndexedDB project, or a `NEXT_PUBLIC_` variable.
+The local Next.js server exposes four same-origin routes:
 
-The chosen model identifier is non-secret and may be saved in `localStorage`. The interface now supports a deliberately limited first analysis slice: after the
-connection test succeeds, the user must explicitly consent before three locally
-stored photos are sent to the selected model through `POST /chat/completions`.
-The response is constrained to and validated against a small observation schema.
-Validated observations pass through a deterministic resolver that creates photo
-evidence, claims and conservative geometry. The resolved graph is persisted in
-IndexedDB and can replace the synthetic fixture in the viewer. Estimated geometry
-remains explicitly marked and is not verified CAD.
+- `GET /api/meta/status` verifies the key and reports model availability.
+- `POST /api/meta/inventory` sends the extracted approved-source snapshot and up
+  to six explicitly approved photographs to Muse. A strict JSON schema limits the result to ten
+  visible, segmentable parts.
+- `POST /api/meta/segment` asks SAM 3.1 for one part mask. The official
+  `@meta-sam/parser` package decodes the response stream and converts the mask to
+  an SVG contour.
+- `POST /api/research/extract` fetches approved public HTTPS sources and returns
+  bounded text, documented dimensions, source images and technical-file links.
 
-Each run stores only its local ID, model, timestamps, status, consent, exact
-photo identifiers/locators, validated observations, resolved graph, sanitized
-errors and aggregate token usage when returned. The key, request images, private
-prompt and raw provider response are not stored in the run.
+The browser then reprojects each contour into the source image, scales it from
+the reference device envelope (or a complete high-confidence documented
+dimension), simplifies it and extrudes it into a binary GLB. Geometry
+generation and assembly validation are local and need no GPU worker. Processing
+is sequential and only accepted visible masks become geometry.
+The former `services/meta-pipeline` contract remains an experimental path, not a
+runtime dependency.
 
-## Not yet implemented
+The key comes from server-only `MODEL_API_KEY` in `.env.local`, or from a form
+field sent only to the local route through `x-eida-meta-key`. The latter stays in
+React memory unless the user opts into tab-scoped `sessionStorage`. It is never
+written to IndexedDB, source control, logs or a `NEXT_PUBLIC_` variable.
 
-PDF inputs, segmentation payloads, input-token preflight, monetary cost
-calculation, server-enforced budgets and rate limiting remain incomplete. The
-adapter performs one bounded retry for `429`/`5xx`; all tests inject a fake fetch
-implementation and never contact Meta.
+Each transfer requires explicit consent. The key and raw provider response are
+not stored. Generated geometry retains an `estimated` fidelity label because an
+image contour cannot establish hidden surfaces, depth or metrological scale.
 
-For the public research prototype, future inference may use the visitor's own key directly from the browser when the provider's CORS policy permits it. Each transfer requires explicit consent and a clear cost/privacy notice. Never put a maintainer-owned or shared provider credential in browser code or a `NEXT_PUBLIC_` variable.
+## Limitations and cost boundary
 
-A separately deployed authenticated service remains required for shared credentials, managed billing, server-enforced quotas, organization accounts, or providers that do not permit browser requests.
+No paid search API, hosted GPU, photogrammetry/CAD service, database, object
+storage or queue is used. Muse/SAM therefore depend on user/hackathon credits
+and provider availability; extraction, contour processing, GLB generation and
+rendering run on the local machine.
+
+PDF text extraction, OCR, CAD parsing, automatic multi-view registration,
+image downloading/analysis, input-token preflight, monetary budget enforcement
+and textured hidden surfaces are not implemented. Technical files are indexed
+as links, not parsed. A ruler, known dimension, measured drawing or imported
+CAD still materially improves scale and fit. A protected remote backend would
+be required for a public multi-user deployment with shared credentials,
+authentication and server-enforced quotas.
 
 ## Security note
 

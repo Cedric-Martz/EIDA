@@ -1,0 +1,175 @@
+openapi: 3.1.0
+info:
+  title: EIDA Meta Reconstruction Pipeline
+  version: 1.0.0
+  description: GPU inference boundary for the static EIDA frontend.
+servers:
+  - url: http://localhost:8001
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      responses:
+        "200":
+          description: Installed model inventory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /v1/reconstructions:
+    post:
+      operationId: createReconstruction
+      security:
+        - bearerAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [request, photos]
+              properties:
+                request:
+                  type: string
+                  format: binary
+                  description: application/json request file
+                photos:
+                  type: array
+                  minItems: 3
+                  maxItems: 8
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        "202":
+          description: Reconstruction queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconstructionJob"
+  /v1/reconstructions/{jobId}:
+    get:
+      operationId: getReconstruction
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-zA-Z0-9._-]{1,160}$"
+      responses:
+        "200":
+          description: Current job state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconstructionJob"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Health:
+      type: object
+      required: [ok, service, models]
+      properties:
+        ok:
+          const: true
+        service:
+          type: string
+        models:
+          type: object
+          required: [reasoning, segmentation, matching, reconstruction]
+          properties:
+            reasoning: { type: string }
+            segmentation: { type: string }
+            matching: { type: string }
+            reconstruction: { type: string }
+    Stage:
+      type: object
+      required: [id, model, status, progress, summary, artifactCount]
+      properties:
+        id:
+          enum:
+            - llama-evidence
+            - sam-segmentation
+            - dino-matching
+            - sam3d-reconstruction
+            - llama-assembly
+            - validation-delivery
+        model: { type: string }
+        status:
+          enum: [pending, running, succeeded, failed, blocked]
+        progress:
+          type: number
+          minimum: 0
+          maximum: 1
+        summary: { type: string }
+        artifactCount:
+          type: integer
+          minimum: 0
+    Artifact:
+      type: object
+      required: [id, kind, label, sourceIds]
+      properties:
+        id: { type: string }
+        kind:
+          enum:
+            [inventory, mask, correspondence, mesh, texture, manifest, report]
+        label: { type: string }
+        url: { type: string, format: uri }
+        mimeType: { type: string }
+        partId: { type: string }
+        sourceIds:
+          type: array
+          items: { type: string }
+    ReconstructionJob:
+      type: object
+      description: Must also satisfy src/domain/meta-pipeline/schema.ts.
+      required:
+        - schemaVersion
+        - id
+        - projectId
+        - status
+        - createdAt
+        - updatedAt
+        - stages
+        - artifacts
+        - manifest
+        - error
+      properties:
+        schemaVersion: { const: 1 }
+        id: { type: string }
+        projectId: { type: string }
+        status:
+          enum: [queued, running, succeeded, failed, cancelled]
+        createdAt: { type: integer, minimum: 0 }
+        updatedAt: { type: integer, minimum: 0 }
+        stages:
+          type: array
+          minItems: 6
+          maxItems: 6
+          items:
+            $ref: "#/components/schemas/Stage"
+        artifacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Artifact"
+        manifest:
+          oneOf:
+            - type: object
+              description: EIDA assembly manifest v1
+            - type: "null"
+        error:
+          oneOf:
+            - type: object
+              required: [code, message]
+              properties:
+                code: { type: string }
+                message: { type: string }
+            - type: "null"
