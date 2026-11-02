@@ -82,10 +82,14 @@ function sourceTypeFromUrl(url: URL): ResearchSource["sourceType"] {
     return path.includes("/guide/") ? "repair-guide" : "web-page";
   }
   if (
-    /\.(?:step|stp|stl|obj|3mf|gltf|glb)$/i.test(path) ||
-    ["grabcad.com", "printables.com", "thingiverse.com"].some(
-      (domain) => host === domain || host.endsWith(`.${domain}`),
-    )
+    /\.(?:step|stp|dxf|iges|igs|stl|obj|3mf|gltf|glb)$/i.test(path) ||
+    [
+      "grabcad.com",
+      "3dcontentcentral.com",
+      "traceparts.com",
+      "printables.com",
+      "thingiverse.com",
+    ].some((domain) => host === domain || host.endsWith(`.${domain}`))
   ) {
     return "cad-model";
   }
@@ -647,7 +651,7 @@ export function SourceManager({
                 </strong>
                 <small>
                   {resolvedEndpoint
-                    ? "Results are normalized by the configured public research endpoint. No secret is stored in this page."
+                    ? "The endpoint searches iFixit plus targeted manuals, FCC records, GitHub hardware and CAD libraries. No secret is stored in this page."
                     : "GitHub Pages calls iFixit’s public API directly. General web search becomes available when a research endpoint is configured."}
                 </small>
               </div>

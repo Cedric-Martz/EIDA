@@ -2,18 +2,23 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { load } from "cheerio";
 import type {
+  CadAnalysis,
   ExtractedArtifact,
   ExtractedDimension,
   ExtractedImage,
   ExtractedWebSource,
 } from "@/domain/research/evidence-bundle";
 import type { ResearchSource } from "@/domain/research/schema";
+import { analyzeCadArtifact } from "./cad-evidence";
 
-const MAX_BYTES = 2_500_000;
+const MAX_PAGE_BYTES = 2_500_000;
+const MAX_CAD_BYTES = 12_000_000;
+const MAX_CAD_FILES_PER_SOURCE = 3;
 const MAX_REDIRECTS = 3;
 const RELEVANT_TERMS =
   /\b(?:dimension|width|height|length|depth|thickness|diameter|battery|board|motherboard|display|screen|housing|shell|connector|camera|speaker|button|screw|remove|replacement|disassembly|teardown|step|mm|millimet)/i;
-const FILE_KIND = /\.(pdf|step|stp|stl|obj|3mf|gltf|glb|zip|rar|7z)(?:$|[?#])/i;
+const FILE_KIND =
+  /\.(pdf|step|stp|dxf|iges|igs|stl|obj|3mf|gltf|glb|zip|rar|7z)(?:$|[?#])/i;
 
 type SourceInput = Pick<ResearchSource, "id" | "url" | "title" | "sourceType">;
 
@@ -63,10 +68,15 @@ async function assertPublicUrl(value: string): Promise<URL> {
   return url;
 }
 
-async function boundedBody(response: Response): Promise<Buffer> {
+async function boundedBody(
+  response: Response,
+  maxBytes: number,
+): Promise<Buffer> {
   const declared = Number(response.headers.get("content-length") ?? "0");
-  if (declared > MAX_BYTES)
-    throw new Error("The source exceeds the 2.5 MB extraction limit.");
+  if (declared > maxBytes)
+    throw new Error(
+      `The source exceeds the ${Math.round(maxBytes / 1_000_000)} MB extraction limit.`,
+    );
   if (!response.body) return Buffer.alloc(0);
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -76,8 +86,10 @@ async function boundedBody(response: Response): Promise<Buffer> {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > MAX_BYTES)
-        throw new Error("The source exceeds the 2.5 MB extraction limit.");
+      if (size > maxBytes)
+        throw new Error(
+          `The source exceeds the ${Math.round(maxBytes / 1_000_000)} MB extraction limit.`,
+        );
       chunks.push(value);
     }
   } finally {
@@ -86,7 +98,13 @@ async function boundedBody(response: Response): Promise<Buffer> {
   return Buffer.concat(chunks, size);
 }
 
-async function fetchPublicSource(initialUrl: string): Promise<{
+async function fetchPublicSource(
+  initialUrl: string,
+  {
+    maxBytes = MAX_PAGE_BYTES,
+    accept = "text/html,application/xhtml+xml,text/plain,application/pdf;q=0.8,*/*;q=0.2",
+  } = {},
+): Promise<{
   url: URL;
   response: Response;
   body: Buffer;
@@ -97,8 +115,7 @@ async function fetchPublicSource(initialUrl: string): Promise<{
       redirect: "manual",
       cache: "no-store",
       headers: {
-        Accept:
-          "text/html,application/xhtml+xml,text/plain,application/pdf;q=0.8,*/*;q=0.2",
+        Accept: accept,
         "User-Agent": "EIDA-Evidence-Extractor/1.0 (+local research tool)",
       },
       signal: AbortSignal.timeout(15_000),
@@ -112,7 +129,7 @@ async function fetchPublicSource(initialUrl: string): Promise<{
     }
     if (!response.ok)
       throw new Error(`Source returned HTTP ${response.status}.`);
-    return { url, response, body: await boundedBody(response) };
+    return { url, response, body: await boundedBody(response, maxBytes) };
   }
   throw new Error("Source redirect failed.");
 }
@@ -137,9 +154,18 @@ function artifactKind(url: string): ExtractedArtifact["kind"] | null {
   const extension = url.match(FILE_KIND)?.[1]?.toLowerCase();
   if (extension === "pdf") return "pdf";
   if (
-    ["step", "stp", "stl", "obj", "3mf", "gltf", "glb"].includes(
-      extension ?? "",
-    )
+    [
+      "step",
+      "stp",
+      "dxf",
+      "iges",
+      "igs",
+      "stl",
+      "obj",
+      "3mf",
+      "gltf",
+      "glb",
+    ].includes(extension ?? "")
   )
     return "cad";
   if (["zip", "rar", "7z"].includes(extension ?? "")) return "archive";
@@ -179,6 +205,8 @@ export function extractDimensions(
       valuesMm,
       raw: raw.trim().slice(0, 500),
       confidence,
+      basis: "page-text",
+      scope: label === "overall dimensions" ? "device" : "unknown",
     });
   };
   for (const match of text.matchAll(triple)) {
@@ -200,6 +228,65 @@ export function extractDimensions(
     );
   }
   return results.slice(0, 50);
+}
+
+function cadDimension(
+  artifact: ExtractedArtifact,
+  analysis: CadAnalysis,
+  source: Pick<SourceInput, "id" | "url">,
+): ExtractedDimension | null {
+  const dimensions = analysis.boundsMm?.dimensions;
+  if (!dimensions || dimensions.some((value) => value <= 0)) return null;
+  const scope =
+    /\b(?:assembly|body|case|chassis|device|enclosure|frame|housing|shell)\b/i.test(
+      artifact.label,
+    )
+      ? "device"
+      : "unknown";
+  return {
+    sourceId: source.id,
+    sourceUrl: source.url,
+    label: `CAD bounds · ${artifact.label}`.slice(0, 200),
+    valuesMm: dimensions,
+    raw: `${analysis.format.toUpperCase()} ${analysis.unit} bounds from ${analysis.pointCount} coordinate${analysis.pointCount === 1 ? "" : "s"}`,
+    confidence: analysis.confidence,
+    basis: "cad-bounds",
+    scope,
+    artifactUrl: artifact.url,
+  };
+}
+
+async function analyzeRemoteCad(
+  artifact: ExtractedArtifact,
+): Promise<{ artifact: ExtractedArtifact; warning?: string }> {
+  try {
+    const fetched = await fetchPublicSource(artifact.url, {
+      maxBytes: MAX_CAD_BYTES,
+      accept:
+        "application/step,application/dxf,text/plain,model/step,model/stl,application/octet-stream;q=0.8,*/*;q=0.2",
+    });
+    const mediaType =
+      fetched.response.headers.get("content-type")?.split(";")[0]?.trim() ||
+      undefined;
+    return {
+      artifact: {
+        ...artifact,
+        url: fetched.url.toString(),
+        cadAnalysis: analyzeCadArtifact({
+          body: fetched.body,
+          url: fetched.url.toString(),
+          ...(mediaType ? { mediaType } : {}),
+        }),
+      },
+    };
+  } catch (error) {
+    return {
+      artifact,
+      warning: `CAD download skipped for ${artifact.label}: ${
+        error instanceof Error ? error.message : "download failed"
+      }`.slice(0, 500),
+    };
+  }
 }
 
 export function extractHtmlEvidence(
@@ -294,6 +381,33 @@ export async function extractWebSource(
 ): Promise<ExtractedWebSource> {
   try {
     const directKind = artifactKind(source.url);
+    if (directKind === "cad") {
+      const directArtifact: ExtractedArtifact = {
+        sourceId: source.id,
+        url: source.url,
+        kind: directKind,
+        label: source.title,
+      };
+      const analyzed = await analyzeRemoteCad(directArtifact);
+      const analysis = analyzed.artifact.cadAnalysis;
+      const dimension = analysis
+        ? cadDimension(analyzed.artifact, analysis, source)
+        : null;
+      return {
+        sourceId: source.id,
+        url: source.url,
+        title: source.title,
+        sourceType: source.sourceType,
+        status: "partial",
+        excerpt: "",
+        dimensions: dimension ? [dimension] : [],
+        images: [],
+        artifacts: [analyzed.artifact],
+        warnings: analyzed.warning
+          ? [analyzed.warning]
+          : (analysis?.warnings ?? []),
+      };
+    }
     if (directKind) {
       return {
         sourceId: source.id,
@@ -312,9 +426,7 @@ export async function extractWebSource(
             label: source.title,
           },
         ],
-        warnings: [
-          "The technical file was indexed, but its binary contents were not parsed.",
-        ],
+        warnings: ["The technical file was indexed for review."],
       };
     }
     const { url, response, body } = await fetchPublicSource(source.url);
@@ -351,7 +463,26 @@ export async function extractWebSource(
       throw new Error(
         `Unsupported source content type: ${mediaType || "unknown"}.`,
       );
-    return extractHtmlEvidence(body.toString("utf8"), source, url.toString());
+    const extracted = extractHtmlEvidence(
+      body.toString("utf8"),
+      source,
+      url.toString(),
+    );
+    const cadIndexes = extracted.artifacts
+      .map((artifact, index) => ({ artifact, index }))
+      .filter(({ artifact }) => artifact.kind === "cad")
+      .slice(0, MAX_CAD_FILES_PER_SOURCE);
+    for (const { artifact, index } of cadIndexes) {
+      const analyzed = await analyzeRemoteCad(artifact);
+      extracted.artifacts[index] = analyzed.artifact;
+      if (analyzed.warning) extracted.warnings.push(analyzed.warning);
+      const analysis = analyzed.artifact.cadAnalysis;
+      const dimension = analysis
+        ? cadDimension(analyzed.artifact, analysis, source)
+        : null;
+      if (dimension) extracted.dimensions.push(dimension);
+    }
+    return extracted;
   } catch (error) {
     return {
       sourceId: source.id,

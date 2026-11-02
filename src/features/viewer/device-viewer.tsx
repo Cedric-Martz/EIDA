@@ -141,16 +141,6 @@ function renderGeometryForPart(
   };
 }
 
-function benchPosition(index: number, depth: number): Vector3 {
-  const column = index % 3;
-  const row = Math.floor(index / 3);
-  return new Vector3(
-    (column - 1) * 2.35,
-    WORKBENCH_Y + depth / 2 + 0.035,
-    (row - 0.5) * 2.35,
-  );
-}
-
 function WorkbenchSurface({ reducedGraphics }: { reducedGraphics: boolean }) {
   return (
     <group>
@@ -414,8 +404,10 @@ function Part({
   explode,
   mode,
   arrangeKey,
+  benchTarget,
   selected,
   isolated,
+  warning,
   onSelect,
   onHoverChange,
   onDragChange,
@@ -431,8 +423,10 @@ function Part({
   explode: number;
   mode: SceneMode;
   arrangeKey: number;
+  benchTarget: Vector3;
   selected: boolean;
   isolated: boolean;
+  warning: boolean;
   onSelect: (id: string) => void;
   onHoverChange: (hovered: boolean) => void;
   onDragChange: (dragging: boolean) => void;
@@ -472,7 +466,15 @@ function Part({
     assemblyPart?.fidelity.level === "placeholder" ||
     component.geometry.kind === "placeholder";
   const exploded = explodedPosition(index, count, explode * 1.6);
-  const bench = useMemo(() => benchPosition(index, depth), [depth, index]);
+  const bench = useMemo(
+    () =>
+      new Vector3(
+        benchTarget.x,
+        WORKBENCH_Y + depth / 2 + 0.035,
+        benchTarget.z,
+      ),
+    [benchTarget.x, benchTarget.z, depth],
+  );
 
   const targetPosition = useMemo(() => {
     if (mode === "bench") {
@@ -507,11 +509,13 @@ function Part({
     }
     return new Euler(-0.05, 0.06, 0.02);
   }, [assemblyTransform, mode]);
-  const color = selected
-    ? "#e25a38"
-    : hovered
-      ? "#ee7a5e"
-      : (materialColors[component.category] ?? "#879095");
+  const color = warning
+    ? "#cf3f2f"
+    : selected
+      ? "#e25a38"
+      : hovered
+        ? "#ee7a5e"
+        : (materialColors[component.category] ?? "#879095");
 
   useEffect(() => {
     transitionStartedAt.current = performance.now() / 1000;
@@ -628,7 +632,7 @@ function Part({
       position={targetPosition}
       rotation={[targetRotation.x, targetRotation.y, targetRotation.z]}
       scale={assemblyTransform?.scale}
-      visible={!isolated || selected}
+      visible={!isolated || selected || warning}
       onPointerDown={startDrag}
       onPointerMove={movePart}
       onPointerUp={stopDrag}
@@ -728,7 +732,15 @@ function Part({
           />
           <Edges
             scale={1.002}
-            color={selected ? "#8e2f1b" : hovered ? "#b84a31" : "#7e8588"}
+            color={
+              warning
+                ? "#7f2118"
+                : selected
+                  ? "#8e2f1b"
+                  : hovered
+                    ? "#b84a31"
+                    : "#7e8588"
+            }
           />
           <PartDetails component={component} depth={depth} />
         </RoundedBox>
@@ -738,33 +750,42 @@ function Part({
 }
 
 function CameraControls({
-  selected,
-  mode,
+  fitTarget,
+  fitRadius,
+  fitKey,
   resetKey,
   enabled,
 }: {
-  selected: string | null;
-  mode: SceneMode;
+  fitTarget: readonly [number, number, number];
+  fitRadius: number;
+  fitKey: string;
   resetKey: number;
   enabled: boolean;
 }) {
   const controls = useRef<OrbitControlsImpl>(null);
   const camera = useThree((state) => state.camera);
   const invalidate = useThree((state) => state.invalidate);
+  const minDistance = Math.max(0.45, fitRadius * 0.45);
+  const maxDistance = Math.max(12, fitRadius * 9);
 
   useEffect(() => {
-    controls.current?.reset();
-  }, [mode, resetKey]);
-
-  useEffect(() => {
-    if (mode === "bench") {
-      controls.current?.target.set(0, -0.35, 0);
-    } else {
-      const [x, y] = selected ? (physicalOffsets[selected] ?? [0, 0]) : [0, 0];
-      controls.current?.target.set(x * 0.22, y * 0.22, 0);
-    }
-    controls.current?.update();
-  }, [mode, selected]);
+    const orbit = controls.current;
+    if (!orbit) return;
+    const target = new Vector3(...fitTarget);
+    const perspectiveFov = "fov" in camera ? camera.fov : 44;
+    const distance = Math.max(
+      1.4,
+      (fitRadius / Math.tan(MathUtils.degToRad(perspectiveFov) / 2)) * 1.35,
+    );
+    const direction = new Vector3(1, 0.78, 1.18).normalize();
+    orbit.target.copy(target);
+    camera.position.copy(target).addScaledVector(direction, distance);
+    camera.near = Math.max(0.01, distance / 200);
+    camera.far = Math.max(100, distance * 30);
+    camera.updateProjectionMatrix();
+    orbit.update();
+    invalidate();
+  }, [camera, fitKey, fitRadius, fitTarget, invalidate, resetKey]);
 
   useEffect(() => {
     function navigateWithKeyboard(event: KeyboardEvent) {
@@ -804,18 +825,18 @@ function CameraControls({
         movement.addScaledVector(right, panStep);
       } else if (key === "+" || key === "=") {
         const distance = camera.position.distanceTo(orbit.target);
-        if (distance > 4.2) {
+        if (distance > minDistance) {
           camera.position.addScaledVector(
             orbit.target.clone().sub(camera.position).normalize(),
-            Math.min(zoomStep, distance - 4.2),
+            Math.min(zoomStep, distance - minDistance),
           );
         }
       } else if (key === "-" || key === "_") {
         const distance = camera.position.distanceTo(orbit.target);
-        if (distance < 14) {
+        if (distance < maxDistance) {
           camera.position.addScaledVector(
             camera.position.clone().sub(orbit.target).normalize(),
-            Math.min(zoomStep, 14 - distance),
+            Math.min(zoomStep, maxDistance - distance),
           );
         }
       } else if (key === "q" || key === "e") {
@@ -840,7 +861,7 @@ function CameraControls({
 
     window.addEventListener("keydown", navigateWithKeyboard);
     return () => window.removeEventListener("keydown", navigateWithKeyboard);
-  }, [camera, enabled, invalidate]);
+  }, [camera, enabled, invalidate, maxDistance, minDistance]);
 
   return (
     <OrbitControls
@@ -854,8 +875,8 @@ function CameraControls({
       panSpeed={0.85}
       rotateSpeed={0.7}
       zoomSpeed={0.85}
-      minDistance={4.2}
-      maxDistance={14}
+      minDistance={minDistance}
+      maxDistance={maxDistance}
       minPolarAngle={0.28}
       maxPolarAngle={1.48}
     />
@@ -873,6 +894,8 @@ export function DeviceViewer({
   showGrid,
   reducedGraphics,
   resetKey,
+  warningPartIds,
+  interactive = true,
   onSelect,
   onReady,
 }: {
@@ -886,6 +909,9 @@ export function DeviceViewer({
   showGrid: boolean;
   reducedGraphics: boolean;
   resetKey: number;
+  warningPartIds?: readonly string[];
+  /** Disable pointer, wheel and keyboard controls for scroll-led presentation views. */
+  interactive?: boolean;
   onSelect: (id: string) => void;
   onReady?: () => void;
 }) {
@@ -907,6 +933,59 @@ export function DeviceViewer({
       ),
     [assembly],
   );
+  const renderGeometries = useMemo(
+    () =>
+      new Map(
+        components.map((component) => {
+          const assemblyPart = assemblyParts.get(component.id);
+          const geometryAsset =
+            assemblyPart?.geometry.kind === "asset"
+              ? geometryAssets.get(assemblyPart.geometry.assetId)
+              : undefined;
+          return [
+            component.id,
+            renderGeometryForPart(component, assemblyPart, geometryAsset),
+          ] as const;
+        }),
+      ),
+    [assemblyParts, components, geometryAssets],
+  );
+  const benchTargets = useMemo(() => {
+    const columns = Math.max(1, Math.ceil(Math.sqrt(components.length)));
+    const rows = Math.max(1, Math.ceil(components.length / columns));
+    const maxWidth = Math.max(
+      1.2,
+      ...components.map(
+        (component) =>
+          (renderGeometries.get(component.id)?.dimensionsMm[0] ?? 70) *
+          SCENE_SCALE,
+      ),
+    );
+    const maxHeight = Math.max(
+      1,
+      ...components.map(
+        (component) =>
+          (renderGeometries.get(component.id)?.dimensionsMm[1] ?? 45) *
+          SCENE_SCALE,
+      ),
+    );
+    const cellX = Math.max(1.55, maxWidth * 1.35);
+    const cellZ = Math.max(1.35, maxHeight * 1.35);
+    return new Map(
+      components.map((component, index) => {
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+        return [
+          component.id,
+          new Vector3(
+            (column - (columns - 1) / 2) * cellX,
+            WORKBENCH_Y,
+            (row - (rows - 1) / 2) * cellZ,
+          ),
+        ] as const;
+      }),
+    );
+  }, [components, renderGeometries]);
   const assemblyTransforms = useMemo(() => {
     if (!assembly || mode === "bench") return null;
     const transforms =
@@ -920,14 +999,109 @@ export function DeviceViewer({
       ]),
     );
   }, [assembly, explode, mode]);
+  const cameraFit = useMemo(() => {
+    const focusedIds = warningPartIds ?? [];
+    if (isolated && focusedIds.length > 1) {
+      const positions = focusedIds.map((id) =>
+        mode === "bench"
+          ? (benchTargets.get(id) ?? new Vector3())
+          : (assemblyTransforms?.get(id)?.position ?? new Vector3()),
+      );
+      const target = positions
+        .reduce((sum, position) => sum.add(position), new Vector3())
+        .multiplyScalar(1 / positions.length);
+      const radius = Math.max(
+        0.9,
+        ...positions.map((position) => position.distanceTo(target) + 0.65),
+      );
+      return {
+        target: [target.x, target.y, target.z] as const,
+        radius,
+      };
+    }
+    if (selected && isolated) {
+      const geometry = renderGeometries.get(selected);
+      const target =
+        mode === "bench"
+          ? benchTargets.get(selected)
+          : assemblyTransforms?.get(selected)?.position;
+      const radius = Math.max(
+        0.5,
+        Math.max(...(geometry?.dimensionsMm ?? DEFAULT_DIMENSIONS_MM)) *
+          SCENE_SCALE *
+          0.75,
+      );
+      return {
+        target: [target?.x ?? 0, target?.y ?? 0, target?.z ?? 0] as const,
+        radius,
+      };
+    }
+
+    if (mode === "bench") {
+      const positions = [...benchTargets.values()];
+      const maxX = Math.max(
+        1,
+        ...positions.map((position) => Math.abs(position.x)),
+      );
+      const maxZ = Math.max(
+        1,
+        ...positions.map((position) => Math.abs(position.z)),
+      );
+      return {
+        target: [0, -0.45, 0] as const,
+        radius: Math.max(2.1, Math.hypot(maxX, maxZ) + 1.15),
+      };
+    }
+
+    if (assembly?.assemblyBoundsMm) {
+      const { minMm, maxMm } = assembly.assemblyBoundsMm;
+      const center = minMm.map(
+        (value, axis) => ((value + maxMm[axis]) / 2) * SCENE_SCALE,
+      ) as [number, number, number];
+      const diagonal = Math.hypot(
+        maxMm[0] - minMm[0],
+        maxMm[1] - minMm[1],
+        maxMm[2] - minMm[2],
+      );
+      return {
+        target: center as readonly [number, number, number],
+        radius: Math.max(
+          1.1,
+          diagonal * SCENE_SCALE * 0.55 * (mode === "exploded" ? 1.6 : 1),
+        ),
+      };
+    }
+
+    return { target: [0, 0, 0] as const, radius: 2.6 };
+  }, [
+    assembly?.assemblyBoundsMm,
+    assemblyTransforms,
+    benchTargets,
+    isolated,
+    mode,
+    renderGeometries,
+    selected,
+    warningPartIds,
+  ]);
+  const warningIds = useMemo(
+    () => new Set(warningPartIds ?? []),
+    [warningPartIds],
+  );
 
   return (
     <div
       className="spatial-viewer"
-      aria-label="Interactive 3D device view"
-      aria-describedby="keyboard-navigation-hint"
-      tabIndex={0}
-      onPointerDown={(event) => event.currentTarget.focus()}
+      aria-label={
+        interactive
+          ? "Interactive 3D device view"
+          : "Scroll-controlled 3D device reconstruction"
+      }
+      aria-describedby={interactive ? "keyboard-navigation-hint" : undefined}
+      tabIndex={interactive ? 0 : -1}
+      onPointerDown={
+        interactive ? (event) => event.currentTarget.focus() : undefined
+      }
+      style={interactive ? undefined : { pointerEvents: "none" }}
       data-hovered={partHovered || undefined}
       data-dragging={dragging || undefined}
     >
@@ -937,7 +1111,7 @@ export function DeviceViewer({
         frameloop="demand"
         performance={{ min: 0.6 }}
         camera={{ position: [5.9, 4.8, 8.6], fov: 44 }}
-        onPointerMissed={() => onSelect("")}
+        onPointerMissed={interactive ? () => onSelect("") : undefined}
         onCreated={onReady}
       >
         <color attach="background" args={["#e8e5de"]} />
@@ -967,8 +1141,10 @@ export function DeviceViewer({
               explode={explode}
               mode={mode}
               arrangeKey={arrangeKey}
+              benchTarget={benchTargets.get(component.id) ?? new Vector3()}
               selected={selected === component.id}
               isolated={isolated}
+              warning={warningIds.has(component.id)}
               onSelect={onSelect}
               onHoverChange={setPartHovered}
               onDragChange={setDragging}
@@ -1002,10 +1178,11 @@ export function DeviceViewer({
           />
         )}
         <CameraControls
-          selected={selected}
-          mode={mode}
+          fitTarget={cameraFit.target}
+          fitRadius={cameraFit.radius}
+          fitKey={`${mode}:${arrangeKey}:${assembly?.id ?? "project"}:${isolated ? (selected ?? "none") : "all"}`}
           resetKey={resetKey}
-          enabled={!dragging}
+          enabled={interactive && !dragging}
         />
       </Canvas>
     </div>

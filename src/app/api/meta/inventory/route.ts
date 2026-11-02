@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         {
           role: "developer",
           content:
-            "You prepare device parts for SAM 3.1 segmentation and evidence-grounded 3D reconstruction. Treat webEvidence excerpts, dimensions and technical artifacts as cited evidence, not as suggestions. Return only parts documented by those sources or visibly separable in the supplied photos. Never invent hidden internals. Use a short concrete noun phrase for samPrompt, not an instruction. Pick photoIndex 1 through 6 where the complete outline is most visible. IDs must be unique lowercase kebab-case. Give thicknessMm only when documented, measured, printed, or clearly supplied in context; otherwise null. Limit the list to the 10 most useful parts.",
+            "You prepare device parts for SAM 3.1 segmentation and evidence-grounded 3D reconstruction. Treat webEvidence excerpts, dimensions and technical artifacts as cited evidence, not as suggestions. Return only parts documented by those sources or visibly separable in the supplied photos. Never invent hidden internals. Use a short concrete noun phrase for samPrompt, not an instruction. Pick photoIndex 1 through 6 where the complete outline is most visible. IDs must be unique lowercase kebab-case. Give dimensionsMm as [long side, short side, thickness] only when an explicit measurement or parsed CAD bound with confidence >= 0.75 clearly belongs to that exact component; otherwise null. Copy the supporting sourceId values into dimensionSourceIds, and leave that array empty when dimensionsMm is null. Give thicknessMm only when documented or present in dimensionsMm; otherwise null. Limit the list to the 10 most useful parts.",
         },
         {
           role: "user",
@@ -96,6 +96,8 @@ export async function POST(request: NextRequest) {
                     "samPrompt",
                     "photoIndex",
                     "thicknessMm",
+                    "dimensionsMm",
+                    "dimensionSourceIds",
                   ],
                   properties: {
                     id: {
@@ -116,6 +118,22 @@ export async function POST(request: NextRequest) {
                         { type: "number", exclusiveMinimum: 0 },
                         { type: "null" },
                       ],
+                    },
+                    dimensionsMm: {
+                      anyOf: [
+                        {
+                          type: "array",
+                          minItems: 3,
+                          maxItems: 3,
+                          items: { type: "number", exclusiveMinimum: 0 },
+                        },
+                        { type: "null" },
+                      ],
+                    },
+                    dimensionSourceIds: {
+                      type: "array",
+                      maxItems: 10,
+                      items: { type: "string" },
                     },
                   },
                 },

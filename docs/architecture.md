@@ -13,8 +13,12 @@ C --> E
 E --> F[Local Next.js Meta proxy]
 F --> G[Muse inventory]
 G --> H[SAM 3.1 masks]
-H --> I[Local contour and GLB builder]
-I --> J[Assembly validation and Three.js viewer]
+E --> M[Optional MapAnything worker]
+M --> N[Metric scene GLB + report]
+H --> I[EIDA Reconstruction Graph]
+N --> I
+I --> J[Deterministic graph compiler]
+J --> K[Assembly validation and Three.js viewer]
 ```
 
 ## Boundaries
@@ -33,7 +37,9 @@ The versioned project graph and its evidence records, not the model's narrative 
 
 - `src/server/research/web-evidence.ts` fetches only approved public HTTPS sources, bounds response size, blocks private-network targets and extracts relevant HTML evidence.
 - `src/app/api/meta/inventory` validates Muse's strict inventory response; `src/app/api/meta/segment` decodes SAM's streamed masks with the official parser.
-- `src/features/local-reconstruction` turns accepted masks into simplified, estimated GLB silhouettes and validates their assembly locally.
+- `src/features/local-reconstruction` turns accepted masks into profile recipes and evidence links, then hands them to the graph compiler.
+- `services/mapanything-worker` delegates multi-view inference and GLB export to the official Apache MapAnything script. The browser checks health, submits 3–8 photos, polls the job and records its artifacts.
+- `src/domain/reconstruction-graph` owns the versioned `.eida.json` schema, cross-reference validation and deterministic compilation into an assembly manifest.
 - IndexedDB stores projects and photo blobs locally. Provider keys, raw provider responses and extracted source bodies are not persisted as inference records.
 
 ## Geometry rules
@@ -43,6 +49,8 @@ The versioned project graph and its evidence records, not the model's narrative 
 - No evidence means `inferred` or `unknown`, never `observed` or `documented`.
 - Render unsupported internals as transparent placeholders.
 - Store exploded offsets separately from physical part positions.
+- Treat `.eida.json` as the editable reconstruction source; GLB is a derived rendering artifact.
+- Every generated outline, dimension, depth and transform must either reference evidence or carry an explicit assumption.
 
 ## Viewer experience
 
@@ -53,6 +61,8 @@ The versioned project graph and its evidence records, not the model's narrative 
 - Reduced graphics mode forces DPR 1, disables canvas shadows/contact shadows and removes backdrop blur.
 - Evidence status is always expressed with text and a symbol; the terracotta accent indicates interaction, never factual certainty.
 - The viewer exposes three presentation transforms: workbench, exploded, and assembled. These transforms do not alter the project graph or claim physical truth.
+- Camera distance and workbench packing are derived from part and assembly bounds. A selected diagnostic can focus and highlight all affected parts instead of relying on fixed scene coordinates.
+- The inspector edits graph dimensions and transforms, recompiles generated assets locally, reruns spatial diagnostics and persists both the graph and derived manifest.
 - Camera navigation supports pointer, touch, and keyboard input. WASD/arrow keys pan, Q/E orbit, +/- zoom, and 0 restores the saved camera pose. Keyboard shortcuts ignore focused form controls and buttons.
 - Workbench dragging modifies only temporary scene offsets. The tidy-up action restores deterministic slots, while reconstruction interpolates each part toward its assembly transform with a staggered delay.
 
@@ -62,7 +72,7 @@ Original photos stay in browser IndexedDB. A BYOK key stays in memory by default
 
 ## Deployment
 
-`npm run dev` or `npm run build && npm start` serves the live path. HTTPS remains required for reliable mobile camera access outside localhost. Browser storage is per-origin and may be evicted. GitHub Pages can host only a separate static guide/demo; it cannot safely host the provider proxy or secret.
+`npm run dev` or `npm run build && npm start` serves the live path. HTTPS remains required for reliable mobile camera access outside localhost. Browser storage is per-origin and may be evicted. GitHub Pages exports `/` as the landing page and `/documentation/` as the installation guide; it cannot safely host the provider proxy or secret.
 
 ## Future protected-service contracts
 

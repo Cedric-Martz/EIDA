@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { simplifyPolygon, svgPathPolygons } from "./silhouette-geometry";
+import {
+  fitPolygonToCadBounds,
+  simplifyPolygon,
+  svgPathPolygons,
+} from "./silhouette-geometry";
 
 describe("SAM silhouette geometry", () => {
   it("extracts separate closed polygons from the official M/L/Z path form", () => {
@@ -29,5 +33,24 @@ describe("SAM silhouette geometry", () => {
     ]);
     expect(simplified.length).toBeLessThan(6);
     expect(simplified).toContainEqual([3, 3]);
+  });
+
+  it("fits a SAM outline to reviewed CAD bounds without losing its contour", () => {
+    const fitted = fitPolygonToCadBounds(
+      [
+        [0, 0],
+        [20, 0],
+        [20, 10],
+        [0, 10],
+      ],
+      [100, 50, 4],
+    );
+
+    expect(fitted).toEqual([
+      [0, 0],
+      [100, 0],
+      [100, 50],
+      [0, 50],
+    ]);
   });
 });

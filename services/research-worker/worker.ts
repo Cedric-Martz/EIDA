@@ -107,7 +107,11 @@ function inferSourceType(
   title: string,
 ): ResearchSource["sourceType"] {
   const value = `${url} ${title}`.toLowerCase();
-  if (/\.(step|stp|stl|obj|glb|gltf|3mf)(\?|$)/.test(value)) return "cad";
+  if (
+    /\.(step|stp|dxf|iges|igs|stl|obj|glb|gltf|3mf)(\?|$)/.test(value) ||
+    /\b(cad|3d model)\b/.test(value)
+  )
+    return "cad";
   if (/github\.com|gitlab\.com/.test(value)) return "repository";
   if (/service[ -]?manual|repair[ -]?manual|workshop[ -]?manual/.test(value)) {
     return "service_manual";
@@ -180,41 +184,57 @@ async function searchBrave(
   limit: number,
   token: string,
 ): Promise<ResearchSource[]> {
-  const researchQuery = `${query} (teardown OR disassembly OR service manual OR datasheet OR CAD OR STEP OR STL)`;
-  const url = new URL("https://api.search.brave.com/res/v1/web/search");
-  url.searchParams.set("q", researchQuery);
-  url.searchParams.set("count", String(Math.min(20, limit)));
-  url.searchParams.set("safesearch", "moderate");
-  const payload = asRecord(
-    await fetchJson(url.toString(), {
-      headers: {
-        accept: "application/json",
-        "x-subscription-token": token,
-      },
+  const queries = [
+    `${query} ("service manual" OR "technical drawing" OR datasheet OR dimensions)`,
+    `${query} (CAD OR STEP OR STP OR DXF) (site:github.com OR site:grabcad.com OR site:3dcontentcentral.com OR site:traceparts.com)`,
+    `${query} (teardown OR disassembly OR "internal photos" OR site:fcc.gov)`,
+  ];
+  const settled = await Promise.allSettled(
+    queries.map(async (researchQuery) => {
+      const url = new URL("https://api.search.brave.com/res/v1/web/search");
+      url.searchParams.set("q", researchQuery);
+      url.searchParams.set("count", String(Math.min(20, limit)));
+      url.searchParams.set("safesearch", "moderate");
+      return asRecord(
+        await fetchJson(url.toString(), {
+          headers: {
+            accept: "application/json",
+            "x-subscription-token": token,
+          },
+        }),
+      );
     }),
   );
-  const web = asRecord(payload?.web);
-  const results = Array.isArray(web?.results) ? web.results : [];
-  return results.flatMap((entry, index): ResearchSource[] => {
-    const result = asRecord(entry);
-    if (!result) return [];
-    const url = text(result.url);
-    const title = text(result.title);
-    if (!/^https:\/\//i.test(url) || !title) return [];
-    const profile = asRecord(result.profile);
-    return [
-      {
-        externalId: `brave-${index}-${new URL(url).hostname}`,
-        url,
-        title,
-        publisher: text(profile?.long_name) || new URL(url).hostname,
-        summary: text(result.description),
-        sourceType: inferSourceType(url, title),
-        provider: "brave",
-        license: "unknown",
-        confidence: 0.64,
-      },
-    ];
+  const payloads = settled.flatMap((result, queryIndex) =>
+    result.status === "fulfilled"
+      ? [{ payload: result.value, queryIndex }]
+      : [],
+  );
+  if (payloads.length === 0) throw new Error("brave_queries_failed");
+  return payloads.flatMap(({ payload, queryIndex }) => {
+    const web = asRecord(payload?.web);
+    const results = Array.isArray(web?.results) ? web.results : [];
+    return results.flatMap((entry, index): ResearchSource[] => {
+      const result = asRecord(entry);
+      if (!result) return [];
+      const url = text(result.url);
+      const title = text(result.title);
+      if (!/^https:\/\//i.test(url) || !title) return [];
+      const profile = asRecord(result.profile);
+      return [
+        {
+          externalId: `brave-${queryIndex}-${index}-${new URL(url).hostname}`,
+          url,
+          title,
+          publisher: text(profile?.long_name) || new URL(url).hostname,
+          summary: text(result.description),
+          sourceType: inferSourceType(url, title),
+          provider: "brave",
+          license: "unknown",
+          confidence: queryIndex === 1 ? 0.72 : 0.64,
+        },
+      ];
+    });
   });
 }
 

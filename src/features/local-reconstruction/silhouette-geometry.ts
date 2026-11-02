@@ -12,6 +12,13 @@ import type {
   LocalPartInventory,
   LocalSegmentationResult,
 } from "@/domain/local-reconstruction";
+import {
+  compileReconstructionGraph,
+  validateReconstructionGraph,
+  type ReconstructionEvidence,
+  type ReconstructionGraph,
+  type ReconstructionPart,
+} from "@/domain/reconstruction-graph";
 import type { LocalAssetRecord } from "@/storage/indexed-db/db";
 
 type Point = readonly [number, number];
@@ -45,6 +52,16 @@ const categoryColor: Record<string, string> = {
   connector: "#8d9294",
   speaker: "#3b4346",
 };
+
+function graphId(prefix: string, value: string): string {
+  const safe = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9:._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+  return `${prefix}:${safe || "unknown"}`;
+}
 
 function polygonArea(points: readonly Point[]): number {
   let area = 0;
@@ -139,6 +156,35 @@ export function simplifyPolygon(
   return simplify(closed).slice(0, -1);
 }
 
+export function fitPolygonToCadBounds(
+  points: readonly Point[],
+  dimensionsMm: readonly [number, number, number],
+): Point[] {
+  const xs = points.map((point) => point[0]);
+  const ys = points.map((point) => point[1]);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const height = Math.max(...ys) - Math.min(...ys);
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return [...points];
+  }
+  const [cadLong, cadShort] = dimensionsMm;
+  const directRatioError = Math.abs(width / height - cadLong / cadShort);
+  const swappedRatioError = Math.abs(width / height - cadShort / cadLong);
+  const targetWidth =
+    directRatioError <= swappedRatioError ? cadLong : cadShort;
+  const targetHeight =
+    directRatioError <= swappedRatioError ? cadShort : cadLong;
+  return points.map(
+    ([x, y]) =>
+      [x * (targetWidth / width), y * (targetHeight / height)] as Point,
+  );
+}
+
 async function imageSize(
   blob: Blob,
 ): Promise<{ width: number; height: number }> {
@@ -162,13 +208,14 @@ async function exportPartGlb(
   pointsMm: readonly Point[],
   depthMm: number,
   color: string,
+  bevelMm = Math.min(0.45, depthMm * 0.08),
 ): Promise<ArrayBuffer> {
   const shape = new Shape(pointsMm.map(([x, y]) => new Vector2(x, -y)));
   const geometry = new ExtrudeGeometry(shape, {
     depth: depthMm,
     bevelEnabled: true,
-    bevelSize: Math.min(0.45, depthMm * 0.08),
-    bevelThickness: Math.min(0.35, depthMm * 0.08),
+    bevelSize: Math.min(bevelMm, depthMm * 0.45),
+    bevelThickness: Math.min(bevelMm, depthMm * 0.35),
     bevelSegments: 2,
     curveSegments: 1,
   });
@@ -194,7 +241,47 @@ async function exportPartGlb(
   return result;
 }
 
-export async function buildSilhouetteAssembly({
+export async function generateGraphAssets(
+  graph: ReconstructionGraph,
+): Promise<AssemblyManifest["assets"]> {
+  const validated = validateReconstructionGraph(graph);
+  const assets: AssemblyManifest["assets"] = [];
+
+  for (const part of validated.parts) {
+    if (part.geometry.kind !== "profile-extrusion") continue;
+    const xs = part.geometry.profileMm.map((point) => point[0]);
+    const ys = part.geometry.profileMm.map((point) => point[1]);
+    const widthMm = Math.max(...xs) - Math.min(...xs);
+    const heightMm = Math.max(...ys) - Math.min(...ys);
+    const glb = await exportPartGlb(
+      part.geometry.profileMm,
+      part.geometry.depthMm,
+      categoryColor[part.category.toLowerCase()] ?? "#76858a",
+      part.geometry.bevelMm,
+    );
+    assets.push({
+      id: part.geometry.assetId,
+      label: `${part.label} · compiled EIDA profile`,
+      uri: arrayBufferToDataUrl(glb),
+      format: "glb",
+      millimetresPerAssetUnit: 1,
+      boundsMm: {
+        minMm: [-widthMm / 2, -heightMm / 2, -part.geometry.depthMm / 2],
+        maxMm: [widthMm / 2, heightMm / 2, part.geometry.depthMm / 2],
+      },
+      evidenceIds: [...new Set(Object.values(part.evidence).flat())],
+    });
+  }
+
+  return assets;
+}
+
+export type ReconstructionGraphBuild = {
+  graph: ReconstructionGraph;
+  manifest: AssemblyManifest;
+};
+
+export async function buildReconstructionGraphAssembly({
   projectId,
   label,
   dimensionsMm,
@@ -204,9 +291,10 @@ export async function buildSilhouetteAssembly({
   label: string;
   dimensionsMm: DimensionsMm;
   parts: readonly SegmentedPart[];
-}): Promise<AssemblyManifest> {
-  const assets: AssemblyManifest["assets"] = [];
-  const assemblyParts: AssemblyManifest["parts"] = [];
+}): Promise<ReconstructionGraphBuild> {
+  const graphParts: ReconstructionPart[] = [];
+  const graphEvidence = new Map<string, ReconstructionEvidence>();
+  const createdAt = Date.now();
 
   for (const [index, part] of parts.entries()) {
     const mask = part.segmentation.masks[0];
@@ -231,7 +319,7 @@ export async function buildSilhouetteAssembly({
     // applying the physical scale, otherwise parts may be visibly undersized.
     const maskToSourceX = (mask.bounds.right - mask.bounds.left) / mask.width;
     const maskToSourceY = (mask.bounds.bottom - mask.bounds.top) / mask.height;
-    const simplified = simplifyPolygon(outline).map(
+    let simplified = simplifyPolygon(outline).map(
       ([x, y]) =>
         [
           x * maskToSourceX * mmPerPixel,
@@ -239,43 +327,66 @@ export async function buildSilhouetteAssembly({
         ] as Point,
     );
     if (simplified.length < 3) continue;
+    if (part.item.dimensionsMm) {
+      simplified = fitPolygonToCadBounds(simplified, part.item.dimensionsMm);
+    }
     const depthMm =
+      part.item.dimensionsMm?.[2] ??
       part.item.thicknessMm ??
       categoryDepth[part.item.category.toLowerCase()] ??
       3;
     const xs = simplified.map((point) => point[0]);
     const ys = simplified.map((point) => point[1]);
-    const widthMm = Math.max(...xs) - Math.min(...xs);
-    const heightMm = Math.max(...ys) - Math.min(...ys);
-    const glb = await exportPartGlb(
-      simplified,
-      depthMm,
-      categoryColor[part.item.category.toLowerCase()] ?? "#76858a",
-    );
     const assetId = `sam-mask-${part.item.id}`;
-    assets.push({
-      id: assetId,
-      label: `${part.item.label} · SAM 3.1 silhouette`,
-      uri: arrayBufferToDataUrl(glb),
-      format: "glb",
-      millimetresPerAssetUnit: 1,
-      boundsMm: {
-        minMm: [-widthMm / 2, -heightMm / 2, -depthMm / 2],
-        maxMm: [widthMm / 2, heightMm / 2, depthMm / 2],
-      },
-      evidenceIds: [],
+    const photoEvidenceId = graphId("photo", part.item.id);
+    const maskEvidenceId = graphId("mask", part.item.id);
+    const dimensionEvidence = part.item.dimensionSourceIds.map((sourceId) =>
+      graphId("source", sourceId),
+    );
+    graphEvidence.set(photoEvidenceId, {
+      id: photoEvidenceId,
+      kind: "user-photo",
+      label: part.photo.name,
+      locator: part.photo.id,
+    });
+    graphEvidence.set(maskEvidenceId, {
+      id: maskEvidenceId,
+      kind: "segmentation-mask",
+      label: `${part.item.label} · SAM 3.1 mask`,
+      sourceId: photoEvidenceId,
+      confidence: mask.confidence ?? undefined,
+    });
+    part.item.dimensionSourceIds.forEach((sourceId, index) => {
+      const evidenceId = dimensionEvidence[index]!;
+      graphEvidence.set(evidenceId, {
+        id: evidenceId,
+        kind: "document",
+        label: `Reviewed dimension source · ${sourceId}`,
+        locator: sourceId,
+      });
     });
     const centerX = (mask.bounds.left + mask.bounds.right) / 2;
     const centerY = (mask.bounds.top + mask.bounds.bottom) / 2;
-    assemblyParts.push({
+    const profileCenterX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const profileCenterY = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const centeredProfile = simplified.map(
+      ([x, y]) =>
+        [x - profileCenterX, -(y - profileCenterY)] as [number, number],
+    );
+    const transformEvidence = [photoEvidenceId, maskEvidenceId];
+    const depthDocumented =
+      (part.item.dimensionsMm !== null || part.item.thicknessMm !== null) &&
+      dimensionEvidence.length > 0;
+    graphParts.push({
       id: part.item.id,
       label: part.item.label,
       category: part.item.category,
-      geometry: { kind: "asset", assetId },
-      fidelity: {
-        level: "estimated",
-        evidenceIds: [],
-        note: "Outline reconstructed from a SAM 3.1 mask; depth and scale remain estimated unless measured.",
+      geometry: {
+        kind: "profile-extrusion",
+        profileMm: centeredProfile,
+        depthMm,
+        bevelMm: Math.min(0.45, depthMm * 0.08),
+        assetId,
       },
       transform: {
         positionMm: [
@@ -287,26 +398,71 @@ export async function buildSilhouetteAssembly({
         scale: [1, 1, 1],
       },
       explodedVectorMm: [0, 0, 18 + index * 8],
-      anchors: [],
+      fidelity: depthDocumented ? "measured" : "estimated",
+      evidence: {
+        presence: [photoEvidenceId],
+        outline: [maskEvidenceId],
+        dimensions: dimensionEvidence,
+        depth: depthDocumented ? dimensionEvidence : [],
+        transform: transformEvidence,
+        material: [],
+      },
+      assumptions: [
+        ...(!depthDocumented
+          ? [
+              {
+                id: `assumption:${part.item.id}:depth`,
+                property: "depth" as const,
+                reason: `Depth uses the EIDA ${part.item.category} prior because no component measurement was available.`,
+                impact: "mechanical" as const,
+              },
+            ]
+          : []),
+        {
+          id: `assumption:${part.item.id}:pose`,
+          property: "transform" as const,
+          reason:
+            "The part centre is projected from its selected photo; multi-view registration can replace this transform later.",
+          impact: "spatial" as const,
+        },
+      ],
     });
   }
 
-  if (assemblyParts.length === 0) {
+  if (graphParts.length === 0) {
     throw new Error("No usable SAM mask was available for local geometry.");
   }
 
-  return {
+  const graph = validateReconstructionGraph({
+    schema: "eida-reconstruction-graph",
     schemaVersion: 1,
-    id: `local-meta-${projectId}-${Date.now()}`,
+    id: `graph-${projectId}-${createdAt}`,
+    projectId,
     label: `${label} · Meta local reconstruction`,
     units: "mm",
+    coordinateSystem: "right-handed-y-up",
+    createdAt,
     assemblyBoundsMm: {
       minMm: [-dimensionsMm[1] / 2, -dimensionsMm[0] / 2, -dimensionsMm[2]],
       maxMm: [dimensionsMm[1] / 2, dimensionsMm[0] / 2, dimensionsMm[2] * 3],
     },
-    assets,
-    materialProfiles: [],
-    parts: assemblyParts,
-    mates: [],
-  };
+    evidence: [...graphEvidence.values()],
+    parts: graphParts,
+    relations: graphParts.slice(1).map((part, index) => ({
+      id: `relation:${part.id}:above:${graphParts[index]!.id}`,
+      kind: "above" as const,
+      sourcePartId: part.id,
+      targetPartId: graphParts[index]!.id,
+      evidenceIds: part.evidence.transform,
+    })),
+  });
+  const assets = await generateGraphAssets(graph);
+
+  return { graph, manifest: compileReconstructionGraph(graph, assets) };
+}
+
+export async function buildSilhouetteAssembly(
+  input: Parameters<typeof buildReconstructionGraphAssembly>[0],
+): Promise<AssemblyManifest> {
+  return (await buildReconstructionGraphAssembly(input)).manifest;
 }

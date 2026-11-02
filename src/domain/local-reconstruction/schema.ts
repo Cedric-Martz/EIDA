@@ -13,6 +13,14 @@ export const localPartInventoryItemSchema = z.object({
   samPrompt: z.string().trim().min(1).max(120),
   photoIndex: z.number().int().min(1).max(6),
   thicknessMm: z.number().positive().max(100).nullable(),
+  dimensionsMm: z
+    .tuple([
+      z.number().positive().max(100_000),
+      z.number().positive().max(100_000),
+      z.number().positive().max(100_000),
+    ])
+    .nullable(),
+  dimensionSourceIds: z.array(z.string().trim().min(1).max(200)).max(10),
 });
 
 export const localPartInventorySchema = z.object({

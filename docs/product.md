@@ -6,9 +6,11 @@ From multiple photographs and selected technical documents, create an interactiv
 
 ## Current usable slice
 
-The local interface opens on a presentation page, then starts a real evidence project instead of silently loading synthetic parts. The user discovers and reviews public repair sources, excludes mismatched variants, confirms a known manufacturer/model or leaves the identity unknown, and adds 3–8 browser-stored photos. The launch first extracts the approved web pages, dimensions, images and technical-file links; it then gives that snapshot plus up to six photos to Muse, sends one accepted part at a time to SAM 3.1, and builds/validates local GLB silhouettes. A confirmed identity is context, never automatic proof of a component.
+The local interface opens on a presentation page, then starts a real evidence project instead of silently loading synthetic parts. The user discovers and reviews public repair sources, excludes mismatched variants, confirms a known manufacturer/model or leaves the identity unknown, and adds 3–8 browser-stored photos. The launch first extracts the approved web pages, dimensions, images and technical-file links; it then gives that snapshot plus up to six photos to Muse and sends one accepted part at a time to SAM 3.1. EIDA writes the accepted results into a validated `.eida.json` reconstruction graph before compiling any GLB geometry. A confirmed identity is context, never automatic proof of a component.
 
-After a BYOK connection test and explicit per-run consent, the approved source snapshot and up to six photos can be processed through the local Meta proxy. Muse inventory and SAM masks are validated before local geometry is generated. The viewer restores the latest project or successful run and keeps the six-part fixture behind a clearly labelled demo action. On the workbench, enlarged hit targets, immediate pointer tracking, temporary camera locking and bounded placement improve part manipulation on pointer and touch devices.
+After a BYOK connection test and explicit per-run consent, the approved source snapshot and up to six photos can be processed through the local Meta proxy. Muse inventory and SAM masks are validated before the reconstruction graph is generated. Each graph part preserves its profile recipe, pose, fidelity, property-level evidence and explicit assumptions. The graph is persisted locally, can be downloaded, and is deterministically compiled into the assembly consumed by the viewer.
+
+The workbench auto-fits the camera and packs parts from their physical bounds. Its inspector exposes graph dimensions, position, assumptions, relations and property-level evidence. Spatial diagnostics can isolate their affected parts, highlight them in the scene and apply a bounded first-pass adjustment before recompilation.
 
 ## Primary user
 
@@ -26,9 +28,10 @@ Samsung Galaxy Tab 4 SM-T530. This is a **reference model**, not a claim that al
 4. Extract their readable text, dimensions, images and technical-file links.
 5. Obtain a structured, evidence-grounded component proposal from Muse Spark.
 6. Obtain SAM masks for visible, segmentable parts.
-7. Show independently manipulable estimated 3D silhouettes.
-8. Show evidence, source links, dimensions and uncertainty for each component.
-9. Keep unsupported depth, hidden geometry and materials explicitly estimated/unknown.
+7. Produce and validate an editable EIDA Reconstruction Graph.
+8. Compile the graph into independently manipulable 3D parts.
+9. Show evidence, source links, dimensions and assumptions for each component.
+10. Keep unsupported depth, hidden geometry and materials explicitly estimated/unknown.
 
 ## Material and service constraints
 
@@ -36,7 +39,12 @@ The project is intentionally built without paid infrastructure. It does not pay 
 
 ## Current limitations
 
-- HTML/text extraction is supported; PDF text, OCR, CAD parsing, technical-file download and automatic multi-view registration are not.
+- HTML/text extraction and controlled ASCII STEP/DXF bounds parsing are
+  supported. PDF text, OCR, full B-rep tessellation, binary/proprietary CAD and
+  automatic multi-view registration are not.
+- Approved CAD links are downloaded to memory only, limited to three files per
+  source and 12 MB per file, fingerprinted with SHA-256, then discarded after
+  parsing.
 - A complete documented dimension can set scale, but image contours cannot establish depth, hidden surfaces, exact placement, material, fastener geometry or mechanical fit.
 - The current workflow is sequential and bounded to six photos and ten inventory items. Failed provider calls do not become synthetic success.
 - The local server has no accounts, shared quota, durable backend persistence or production-grade multi-user isolation.

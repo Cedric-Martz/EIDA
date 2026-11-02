@@ -9,6 +9,8 @@ import {
 } from "@/domain/assembly";
 import type { PhotoObservation } from "@/domain/inference/observation";
 import type { LocalPartInventory } from "@/domain/local-reconstruction";
+import type { MapAnythingHealth, MapAnythingJob } from "@/domain/mapanything";
+import type { ReconstructionGraph } from "@/domain/reconstruction-graph";
 import { inferDeviceDimensions } from "@/domain/reconstruction/estimated-assembly";
 import type { SelectedSource, WebEvidenceBundle } from "@/domain/research";
 import { PhotoIntake } from "@/features/capture/photo-intake";
@@ -19,9 +21,10 @@ import {
   type LocalMetaStatus,
 } from "@/features/local-reconstruction/local-meta-client";
 import {
-  buildSilhouetteAssembly,
+  buildReconstructionGraphAssembly,
   type SegmentedPart,
 } from "@/features/local-reconstruction/silhouette-geometry";
+import { createMapAnythingClient } from "@/features/mapanything/mapanything-client";
 import { extractApprovedSources } from "@/features/research/evidence-extractor-client";
 import { db } from "@/storage/indexed-db/db";
 import styles from "./project-workflow.module.css";
@@ -39,14 +42,22 @@ export type ProjectWorkflowProps = {
     manifest: AssemblyManifest,
     diagnostics: readonly AssemblyDiagnostic[],
     activateViewer?: boolean,
+    graph?: ReconstructionGraph,
   ) => void;
   onClose: () => void;
 };
 
 const SESSION_KEY = "eida:local-meta-key";
+const MAP_ENDPOINT_KEY = "eida:mapanything-endpoint";
 
 type Stage =
-  "idle" | "evidence" | "inventory" | "segmentation" | "geometry" | "done";
+  | "idle"
+  | "evidence"
+  | "inventory"
+  | "segmentation"
+  | "mapping"
+  | "geometry"
+  | "done";
 
 const stageDefinitions = [
   {
@@ -54,7 +65,7 @@ const stageDefinitions = [
     model: "Evidence extractor",
     title: "Read the approved sources",
     detail:
-      "Fetches page text, documented dimensions, teardown images and technical files.",
+      "Fetches approved pages and CAD files, fingerprints them, then extracts documented and geometric dimensions.",
     output: "Extracted sources",
   },
   {
@@ -74,12 +85,20 @@ const stageDefinitions = [
     output: "Masks and contours",
   },
   {
-    id: "geometry",
-    model: "Local CPU",
-    title: "Build the geometry",
+    id: "mapping",
+    model: "MapAnything Apache",
+    title: "Register the views in metric 3D",
     detail:
-      "Simplifies and extrudes each SAM contour, then exports local GLB assets.",
-    output: "Editable GLB parts",
+      "Runs in parallel on an optional local or free GPU worker and returns a reviewable spatial scene.",
+    output: "Metric artifacts",
+  },
+  {
+    id: "geometry",
+    model: "EIDA Graph Compiler",
+    title: "Write and compile .eida.json",
+    detail:
+      "Links every contour, dimension, depth and transform to evidence before compiling deterministic GLB assets.",
+    output: "Graph parts",
   },
   {
     id: "done",
@@ -97,6 +116,7 @@ function stageIndex(stage: Stage): number {
     "evidence",
     "inventory",
     "segmentation",
+    "mapping",
     "geometry",
     "done",
   ].indexOf(stage);
@@ -114,6 +134,20 @@ function errorText(error: unknown): string {
   return error instanceof Error
     ? error.message
     : "Unexpected reconstruction error.";
+}
+
+function waitForPollingInterval(signal: AbortSignal, milliseconds = 1_800) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(resolve, milliseconds);
+    signal.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timer);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
 }
 
 export function ProjectWorkflow({
@@ -141,6 +175,15 @@ export function ProjectWorkflow({
   const [model, setModel] = useState("muse-spark-1.3");
   const [status, setStatus] = useState<LocalMetaStatus | null>(null);
   const [checking, setChecking] = useState(false);
+  const [mapEnabled, setMapEnabled] = useState(false);
+  const [mapEndpoint, setMapEndpoint] = useState(
+    process.env.NEXT_PUBLIC_EIDA_MAPANYTHING_API ?? "http://localhost:8001",
+  );
+  const [mapToken, setMapToken] = useState("");
+  const [mapHealth, setMapHealth] = useState<MapAnythingHealth | null>(null);
+  const [mapChecking, setMapChecking] = useState(false);
+  const [mapJob, setMapJob] = useState<MapAnythingJob | null>(null);
+  const [mapFallback, setMapFallback] = useState("");
   const [consent, setConsent] = useState(false);
   const [activeStage, setActiveStage] = useState<Stage>("idle");
   const [evidence, setEvidence] = useState<WebEvidenceBundle | null>(null);
@@ -148,12 +191,20 @@ export function ProjectWorkflow({
   const [segmented, setSegmented] = useState<SegmentedPart[]>([]);
   const [segmentProgress, setSegmentProgress] = useState(0);
   const [manifest, setManifest] = useState<AssemblyManifest | null>(null);
+  const [graph, setGraph] = useState<ReconstructionGraph | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const running = activeStage !== "idle" && activeStage !== "done";
   const connected = status?.connected === true;
+  const visibleStageDefinitions = stageDefinitions.filter(
+    (definition) => definition.id !== "mapping" || mapEnabled,
+  );
   const ready =
-    connected && photoCount >= 3 && selectedSources.length > 0 && consent;
+    connected &&
+    photoCount >= 3 &&
+    selectedSources.length > 0 &&
+    consent &&
+    (!mapEnabled || mapHealth?.ready === true);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -162,6 +213,8 @@ export function ProjectWorkflow({
       setApiKey(saved);
       setRememberKey(true);
     }
+    const savedMapEndpoint = window.sessionStorage.getItem(MAP_ENDPOINT_KEY);
+    if (savedMapEndpoint) setMapEndpoint(savedMapEndpoint);
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape" && !running) onClose();
     }
@@ -202,7 +255,17 @@ export function ProjectWorkflow({
         ) as DimensionsMm,
     );
     setManifest(null);
+    setGraph(null);
     if (activeStage === "done") setActiveStage("idle");
+  }
+
+  function updateMapEndpoint(value: string) {
+    setMapEndpoint(value);
+    setMapHealth(null);
+    setMapJob(null);
+    setMapFallback("");
+    if (value.trim()) window.sessionStorage.setItem(MAP_ENDPOINT_KEY, value);
+    else window.sessionStorage.removeItem(MAP_ENDPOINT_KEY);
   }
 
   async function verifyMeta() {
@@ -229,6 +292,56 @@ export function ProjectWorkflow({
     }
   }
 
+  async function verifyMapAnything() {
+    setMapChecking(true);
+    setError("");
+    setMapFallback("");
+    try {
+      const client = createMapAnythingClient({
+        endpoint: mapEndpoint,
+        token: mapToken,
+      });
+      const health = await client.health();
+      setMapHealth(health);
+      if (!health.ready) setError(health.detail);
+      else setMessage(`MapAnything ready on ${health.device}.`);
+    } catch (connectionError) {
+      setMapHealth(null);
+      setError(errorText(connectionError));
+    } finally {
+      setMapChecking(false);
+    }
+  }
+
+  async function pollMapAnything(
+    initialJob: MapAnythingJob,
+    signal: AbortSignal,
+  ): Promise<MapAnythingJob> {
+    const client = createMapAnythingClient({
+      endpoint: mapEndpoint,
+      token: mapToken,
+    });
+    let current = initialJob;
+    while (current.status === "queued" || current.status === "running") {
+      await waitForPollingInterval(signal);
+      current = await client.getJob(current.id, signal);
+      setMapJob(current);
+      await db.metaJobs.put({
+        id: current.id,
+        projectId,
+        status: current.status,
+        updatedAt: current.updatedAt,
+        data: current,
+      });
+    }
+    if (current.status !== "succeeded") {
+      throw new Error(
+        current.error?.message ?? "MapAnything did not complete this scene.",
+      );
+    }
+    return current;
+  }
+
   async function runWorkflow() {
     const controller = new AbortController();
     abortRef.current = controller;
@@ -238,6 +351,9 @@ export function ProjectWorkflow({
     setInventory(null);
     setSegmented([]);
     setManifest(null);
+    setGraph(null);
+    setMapJob(null);
+    setMapFallback("");
     setSegmentProgress(0);
     setActiveStage("evidence");
     try {
@@ -247,7 +363,7 @@ export function ProjectWorkflow({
           .equals(projectId)
           .filter((asset) => asset.kind === "photo")
           .sortBy("createdAt")
-      ).slice(0, 6);
+      ).slice(0, 8);
       if (photos.length < 3) throw new Error("Add at least three photos.");
 
       const extractedEvidence = await extractApprovedSources(
@@ -267,7 +383,9 @@ export function ProjectWorkflow({
         .flatMap((source) => source.dimensions)
         .find(
           (dimension) =>
-            dimension.valuesMm.length === 3 && dimension.confidence >= 0.9,
+            dimension.valuesMm.length === 3 &&
+            dimension.scope === "device" &&
+            dimension.confidence >= 0.85,
         );
       const runDimensions = documentedEnvelope
         ? ([...documentedEnvelope.valuesMm].sort(
@@ -276,15 +394,53 @@ export function ProjectWorkflow({
         : dimensions;
       if (documentedEnvelope) setDimensions(runDimensions);
 
+      let mapResultPromise: Promise<
+        { ok: true; job: MapAnythingJob } | { ok: false; error: string }
+      > | null = null;
+      if (mapEnabled) {
+        try {
+          const mapClient = createMapAnythingClient({
+            endpoint: mapEndpoint,
+            token: mapToken,
+          });
+          const initialMapJob = await mapClient.createJob(
+            {
+              projectId,
+              deviceLabel,
+              dimensionsMm: runDimensions,
+              sourceIds: selectedSources.map((source) => source.id),
+            },
+            photos,
+            controller.signal,
+          );
+          setMapJob(initialMapJob);
+          await db.metaJobs.put({
+            id: initialMapJob.id,
+            projectId,
+            status: initialMapJob.status,
+            updatedAt: initialMapJob.updatedAt,
+            data: initialMapJob,
+          });
+          mapResultPromise = pollMapAnything(initialMapJob, controller.signal)
+            .then((job) => ({ ok: true as const, job }))
+            .catch((mapError) => ({
+              ok: false as const,
+              error: errorText(mapError),
+            }));
+        } catch (mapStartError) {
+          setMapFallback(errorText(mapStartError));
+        }
+      }
+
       setActiveStage("inventory");
       setMessage(
-        `${usableSources.length} source${usableSources.length === 1 ? "" : "s"} extracted. Muse is grounding the part inventory in their contents…`,
+        `${usableSources.length} source${usableSources.length === 1 ? "" : "s"} extracted with ${usableSources.flatMap((source) => source.artifacts).filter((artifact) => artifact.cadAnalysis?.status === "parsed").length} parsed CAD file${usableSources.flatMap((source) => source.artifacts).filter((artifact) => artifact.cadAnalysis?.status === "parsed").length === 1 ? "" : "s"}. Muse is grounding the part inventory in their contents…`,
       );
 
       const nextInventory = await createLocalInventory({
         key: apiKey,
         model,
-        photos,
+        photos: photos.slice(0, 6),
         context: {
           deviceLabel,
           dimensionsMm: runDimensions,
@@ -336,26 +492,77 @@ export function ProjectWorkflow({
         );
       }
 
+      let completedMapJob: MapAnythingJob | null = null;
+      if (mapResultPromise) {
+        setActiveStage("mapping");
+        setMessage(
+          "SAM masks are ready. Waiting for the parallel MapAnything metric scene…",
+        );
+        const mapResult = await mapResultPromise;
+        if (!mapResult.ok) {
+          setMapFallback(mapResult.error);
+          setMessage(
+            "MapAnything was unavailable, so EIDA continued automatically with the local silhouette path.",
+          );
+        } else {
+          const successfulMapJob = mapResult.job;
+          completedMapJob = successfulMapJob;
+          setMessage(
+            `${successfulMapJob.artifacts.length} MapAnything artifact${successfulMapJob.artifacts.length === 1 ? "" : "s"} linked as spatial evidence.`,
+          );
+        }
+      }
+
       setActiveStage("geometry");
       setMessage(
-        `${results.length} masks accepted. Building GLB silhouettes locally on this computer…`,
+        `${results.length} masks accepted. Writing the evidence-linked EIDA reconstruction graph…`,
       );
-      const nextManifest = await buildSilhouetteAssembly({
+      const build = await buildReconstructionGraphAssembly({
         projectId,
         label: deviceLabel,
         dimensionsMm: runDimensions,
         parts: results,
       });
+      const metricScene = completedMapJob?.artifacts.find(
+        (artifact) => artifact.kind === "scene-glb",
+      );
+      const nextGraph: ReconstructionGraph = metricScene
+        ? {
+            ...build.graph,
+            evidence: [
+              ...build.graph.evidence,
+              {
+                id: `${completedMapJob?.id ?? "mapanything"}-metric-scene`,
+                kind: "generated-mesh",
+                label: "MapAnything metric scene and registered cameras",
+                locator: metricScene.url,
+                confidence: 0.7,
+              },
+            ],
+          }
+        : build.graph;
+      const nextManifest = build.manifest;
       const diagnostics = diagnoseAssembly(nextManifest);
+      setGraph(nextGraph);
       setManifest(nextManifest);
+      await db.metaJobs.put({
+        id: nextGraph.id,
+        projectId,
+        status: "succeeded",
+        updatedAt: Date.now(),
+        data: nextGraph,
+      });
       setActiveStage("done");
       setMessage(
-        `${nextManifest.parts.length} real SAM outlines converted to GLB. ${diagnostics.length} spatial warning${diagnostics.length === 1 ? "" : "s"} retained for review.`,
+        `${nextGraph.parts.length} graph part${nextGraph.parts.length === 1 ? "" : "s"} validated and compiled to GLB${metricScene ? " with a MapAnything spatial reference" : ""}. ${diagnostics.length} spatial warning${diagnostics.length === 1 ? "" : "s"} retained for review.`,
       );
-      onApplyManifest(nextManifest, diagnostics, false);
+      onApplyManifest(nextManifest, diagnostics, false, nextGraph);
       setConsent(false);
     } catch (workflowError) {
-      if (!controller.signal.aborted) setError(errorText(workflowError));
+      if (!controller.signal.aborted) {
+        controller.abort();
+        setError(errorText(workflowError));
+      }
       setActiveStage("idle");
     } finally {
       abortRef.current = null;
@@ -367,6 +574,22 @@ export function ProjectWorkflow({
     abortRef.current = null;
     setActiveStage("idle");
     setMessage("Reconstruction stopped. Existing results were kept locally.");
+  }
+
+  function downloadGraph() {
+    if (!graph) return;
+    const url = URL.createObjectURL(
+      new Blob([`${JSON.stringify(graph, null, 2)}\n`], {
+        type: "application/vnd.eida.reconstruction+json",
+      }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${graph.id}.eida.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   return (
@@ -388,12 +611,16 @@ export function ProjectWorkflow({
             <p>Local Meta reconstruction studio</p>
             <h1 id={titleId}>Configure and run everything here</h1>
             <span>
-              Muse and SAM run on your Meta credits. Geometry is generated on
-              this computer—no pod, worker URL or extra service.
+              Muse and SAM run on your Meta credits. EIDA writes a validated
+              reconstruction graph, then compiles the geometry locally.
             </span>
           </div>
           <div className={styles.headerActions}>
-            <strong>{activeStage === "done" ? "5 / 5" : "LOCAL"}</strong>
+            <strong>
+              {activeStage === "done"
+                ? `${visibleStageDefinitions.length} / ${visibleStageDefinitions.length}`
+                : "LOCAL"}
+            </strong>
             <button
               ref={closeRef}
               type="button"
@@ -535,27 +762,112 @@ export function ProjectWorkflow({
                 )}
               </div>
               <p className={styles.helpText}>
-                A ruler or one known dimension materially improves the result.
+                High-confidence device-level CAD bounds replace these values
+                automatically. STEP coordinate envelopes remain reviewable
+                estimates unless assembly placements can be resolved.
               </p>
+            </section>
+
+            <section className={styles.setupCard}>
+              <div className={styles.sectionHeading}>
+                <span>04</span>
+                <div>
+                  <p>Metric pass</p>
+                  <h2>MapAnything worker</h2>
+                </div>
+                <i data-ready={!mapEnabled || mapHealth?.ready === true}>
+                  {!mapEnabled
+                    ? "Optional"
+                    : mapHealth?.ready
+                      ? "Ready"
+                      : "Connect"}
+                </i>
+              </div>
+              <label className={styles.mapToggle}>
+                <input
+                  type="checkbox"
+                  checked={mapEnabled}
+                  onChange={(event) => {
+                    setMapEnabled(event.target.checked);
+                    setMapFallback("");
+                  }}
+                  disabled={running}
+                />
+                <span>
+                  Add metric multi-view registration
+                  <small>
+                    Uses the Apache Meta checkpoint on your own local or free
+                    GPU worker. It does not consume Model API credits.
+                  </small>
+                </span>
+              </label>
+              {mapEnabled && (
+                <>
+                  <label className={styles.fullField}>
+                    Worker endpoint
+                    <input
+                      type="url"
+                      value={mapEndpoint}
+                      onChange={(event) =>
+                        updateMapEndpoint(event.target.value)
+                      }
+                      placeholder="http://localhost:8001"
+                      autoComplete="url"
+                    />
+                  </label>
+                  <label className={styles.fullField}>
+                    Worker token · optional
+                    <input
+                      type="password"
+                      value={mapToken}
+                      onChange={(event) => setMapToken(event.target.value)}
+                      placeholder="Only for a remote worker"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <button
+                    className={styles.connectionButton}
+                    type="button"
+                    onClick={() => void verifyMapAnything()}
+                    disabled={mapChecking || running}
+                  >
+                    {mapChecking
+                      ? "Checking worker…"
+                      : mapHealth?.ready
+                        ? "Check worker again"
+                        : "Connect MapAnything"}
+                  </button>
+                  {mapHealth && (
+                    <p className={styles.workerDetail}>
+                      <strong>{mapHealth.device}</strong> · {mapHealth.detail}
+                    </p>
+                  )}
+                </>
+              )}
             </section>
           </aside>
 
           <main className={styles.runColumn}>
             <div className={styles.pipelineIntro}>
               <div>
-                <span className={styles.eyebrow}>04 · Reconstruction</span>
-                <h2>One launch, five visible stages</h2>
+                <span className={styles.eyebrow}>05 · Reconstruction</span>
+                <h2>From evidence to an editable 3D recipe</h2>
                 <p>
                   Every Meta result remains reviewable. The local geometry never
                   claims measured accuracy without a measurement.
                 </p>
               </div>
-              <span className={styles.costBadge}>Meta credits only</span>
+              <span className={styles.costBadge}>
+                Meta credits · optional free worker
+              </span>
             </div>
 
             <div className={styles.content}>
-              {stageDefinitions.map((definition, index) => {
-                const state = stageState(definition.id, activeStage);
+              {visibleStageDefinitions.map((definition, index) => {
+                const state =
+                  definition.id === "mapping" && mapFallback
+                    ? "fallback"
+                    : stageState(definition.id, activeStage);
                 const count =
                   definition.id === "evidence"
                     ? evidence?.sources.filter(
@@ -565,9 +877,11 @@ export function ProjectWorkflow({
                       ? inventory?.items.length
                       : definition.id === "segmentation"
                         ? segmented.length
-                        : definition.id === "geometry"
-                          ? manifest?.assets.length
-                          : manifest?.parts.length;
+                        : definition.id === "mapping"
+                          ? mapJob?.artifacts.length
+                          : definition.id === "geometry"
+                            ? graph?.parts.length
+                            : manifest?.parts.length;
                 return (
                   <article
                     className={styles.step}
@@ -592,7 +906,9 @@ export function ProjectWorkflow({
                             ? "Complete"
                             : state === "running"
                               ? "Running"
-                              : "Queued"}
+                              : state === "fallback"
+                                ? "Fallback"
+                                : "Queued"}
                         </span>
                       </div>
                       <div className={styles.stageOutput}>
@@ -603,6 +919,11 @@ export function ProjectWorkflow({
                         state === "running" && (
                           <progress value={segmentProgress} max={1} />
                         )}
+                      {definition.id === "mapping" &&
+                        mapJob &&
+                        state === "running" && (
+                          <progress value={mapJob.progress} max={1} />
+                        )}
                     </div>
                   </article>
                 );
@@ -611,6 +932,20 @@ export function ProjectWorkflow({
 
             {evidence && (
               <section className={styles.evidenceSummary}>
+                <div>
+                  <strong>
+                    {evidence.sources.reduce(
+                      (total, source) =>
+                        total +
+                        source.artifacts.filter(
+                          (artifact) =>
+                            artifact.cadAnalysis?.status === "parsed",
+                        ).length,
+                      0,
+                    )}
+                  </strong>
+                  <span>STEP/DXF files parsed</span>
+                </div>
                 <div>
                   <strong>
                     {evidence.sources.reduce(
@@ -671,13 +1006,69 @@ export function ProjectWorkflow({
                         )}
                         <p>
                           <strong>{item.label}</strong>
-                          <small>{item.samPrompt}</small>
+                          <small>
+                            {item.dimensionsMm
+                              ? `${item.dimensionsMm.join(" × ")} mm · CAD constrained`
+                              : item.samPrompt}
+                          </small>
                         </p>
                         <b>{mask ? "Mask" : "Waiting"}</b>
                       </div>
                     );
                   })}
                 </div>
+              </section>
+            )}
+
+            {graph && (
+              <section className={styles.graphSummary}>
+                <div>
+                  <span className={styles.eyebrow}>
+                    EIDA reconstruction graph
+                  </span>
+                  <h2>{graph.parts.length} editable part recipes</h2>
+                  <p>
+                    {graph.evidence.length} evidence records and{" "}
+                    {graph.relations.length} spatial relations are preserved
+                    before GLB compilation.
+                  </p>
+                </div>
+                <button type="button" onClick={downloadGraph}>
+                  Download .eida.json
+                </button>
+              </section>
+            )}
+
+            {(mapJob?.artifacts.length || mapFallback) && (
+              <section
+                className={styles.mapSummary}
+                data-fallback={Boolean(mapFallback)}
+              >
+                <div>
+                  <span className={styles.eyebrow}>Metric reconstruction</span>
+                  <h2>
+                    {mapFallback
+                      ? "Local fallback kept the run moving"
+                      : "MapAnything spatial evidence ready"}
+                  </h2>
+                  <p>
+                    {mapFallback ||
+                      "The registered scene is linked to the EIDA graph without replacing its editable component recipes."}
+                  </p>
+                </div>
+                {!mapFallback &&
+                  mapJob?.artifacts.map((artifact) => (
+                    <a
+                      key={artifact.id}
+                      href={artifact.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {artifact.kind === "scene-glb"
+                        ? "Open GLB"
+                        : "Run report"}
+                    </a>
+                  ))}
               </section>
             )}
 
@@ -700,10 +1091,17 @@ export function ProjectWorkflow({
                     disabled={running}
                   />
                   <span>
-                    Send the first three local photos to Meta for this run
+                    Read approved sources and send the selected photos to the
+                    configured models for this run
                     <small>
-                      Muse creates prompts; SAM 3.1 creates masks. The generated
-                      geometry remains local.
+                      Up to three linked CAD files per source are downloaded to
+                      memory with a 12 MB limit, fingerprinted and discarded
+                      after parsing. Muse creates prompts; SAM 3.1 creates
+                      masks.{" "}
+                      {mapEnabled
+                        ? "Up to eight views also go to your MapAnything worker. "
+                        : ""}
+                      Generated component geometry remains local.
                     </small>
                   </span>
                 </label>
@@ -713,11 +1111,16 @@ export function ProjectWorkflow({
                   className={styles.reconstructButton}
                   type="button"
                   onClick={() =>
-                    onApplyManifest(manifest, diagnoseAssembly(manifest), true)
+                    onApplyManifest(
+                      manifest,
+                      diagnoseAssembly(manifest),
+                      true,
+                      graph ?? undefined,
+                    )
                   }
                 >
                   <span>
-                    <small>{manifest.parts.length} local GLB parts</small>
+                    <small>{manifest.parts.length} compiled graph parts</small>
                     Open reconstructed assembly
                   </span>
                   <b aria-hidden="true">→</b>
@@ -730,7 +1133,10 @@ export function ProjectWorkflow({
                   disabled={!ready || running}
                 >
                   <span>
-                    <small>Muse Spark + SAM 3.1 + local CPU</small>
+                    <small>
+                      Muse Spark + SAM 3.1
+                      {mapEnabled ? " + MapAnything" : " + local CPU"}
+                    </small>
                     {running
                       ? "Reconstruction in progress…"
                       : "Start reconstruction"}
@@ -761,6 +1167,11 @@ export function ProjectWorkflow({
               {selectedSources.length === 0 && (
                 <p className={styles.requirement}>
                   Approve at least one source.
+                </p>
+              )}
+              {mapEnabled && mapHealth?.ready !== true && (
+                <p className={styles.requirement}>
+                  Connect the optional MapAnything worker in section 04.
                 </p>
               )}
             </section>

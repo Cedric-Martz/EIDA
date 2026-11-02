@@ -202,7 +202,8 @@
   box-shadow: 0 0 0 3px rgba(223, 91, 57, 0.11);
 }
 .checkboxField,
-.consentField {
+.consentField,
+.mapToggle {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -214,9 +215,37 @@
   margin: 8px 0;
 }
 .checkboxField input,
-.consentField input {
+.consentField input,
+.mapToggle input {
   margin: 2px 0 0;
   accent-color: #df5b39;
+}
+.mapToggle {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid rgba(57, 118, 101, 0.18);
+  border-radius: 10px;
+  background: #edf6f1;
+}
+.mapToggle span {
+  display: grid;
+  gap: 3px;
+  color: #2a4940;
+  font-weight: 750;
+}
+.mapToggle small {
+  color: #6b7c76;
+  font-weight: 500;
+}
+.workerDetail {
+  margin: 9px 0 0;
+  color: #687b73;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.workerDetail strong {
+  color: #28664e;
+  text-transform: uppercase;
 }
 .connectionButton,
 .sourceSummary button,
@@ -421,6 +450,10 @@
   background: #dff0e7;
   color: #247151;
 }
+.stepHeading > span[data-state="fallback"] {
+  background: #ffe8df;
+  color: #a74730;
+}
 .stageOutput {
   display: flex;
   align-items: center;
@@ -448,7 +481,7 @@
 }
 .evidenceSummary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
@@ -528,6 +561,88 @@
 }
 .partChips > div[data-ready="true"] b {
   color: #247151;
+}
+.graphSummary {
+  margin-top: 14px;
+  padding: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px solid rgba(57, 118, 101, 0.24);
+  border-radius: 14px;
+  background: linear-gradient(135deg, #edf6f1, #f7f9f9);
+}
+.mapSummary {
+  margin-top: 14px;
+  padding: 17px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(57, 118, 101, 0.24);
+  border-radius: 14px;
+  background: #edf6f1;
+}
+.mapSummary > div {
+  min-width: 0;
+  flex: 1;
+}
+.mapSummary h2,
+.mapSummary p {
+  margin: 0;
+}
+.mapSummary h2 {
+  margin-top: 5px;
+  color: #263b42;
+  font-size: 15px;
+}
+.mapSummary p {
+  margin-top: 5px;
+  color: #687b73;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.mapSummary a {
+  flex: 0 0 auto;
+  padding: 9px 12px;
+  border: 1px solid rgba(57, 118, 101, 0.32);
+  border-radius: 999px;
+  background: #fff;
+  color: #28664e;
+  font-size: 9px;
+  font-weight: 750;
+  text-decoration: none;
+}
+.mapSummary[data-fallback="true"] {
+  border-color: rgba(223, 91, 57, 0.24);
+  background: #fff3ed;
+}
+.graphSummary h2,
+.graphSummary p {
+  margin: 0;
+}
+.graphSummary h2 {
+  margin-top: 5px;
+  color: #263b42;
+  font-size: 17px;
+}
+.graphSummary p {
+  max-width: 520px;
+  margin-top: 5px;
+  color: #687b73;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.graphSummary button {
+  flex: 0 0 auto;
+  padding: 10px 13px;
+  border: 1px solid rgba(57, 118, 101, 0.34);
+  border-radius: 999px;
+  background: #fff;
+  color: #28664e;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 750;
 }
 .message,
 .errorMessage {
@@ -639,6 +754,14 @@
   .partChips,
   .evidenceSummary {
     grid-template-columns: 1fr;
+  }
+  .graphSummary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .mapSummary {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .pipelineIntro {
     display: grid;

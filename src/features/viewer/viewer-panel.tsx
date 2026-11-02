@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { GlassPanel } from "@/components/ui/glass-panel";
 import {
@@ -19,12 +20,19 @@ import { inferenceRunSchema, type InferenceRun } from "@/domain/inference/run";
 import { demoAssemblyManifest } from "@/domain/reconstruction/demo-assembly";
 import { demoProject } from "@/domain/reconstruction/demo-project";
 import {
+  compileReconstructionGraph,
+  reconstructionGraphSchema,
+  validateReconstructionGraph,
+  type ReconstructionGraph,
+} from "@/domain/reconstruction-graph";
+import {
   researchSourceSchema,
   type ResearchSource,
   type SelectedSource,
 } from "@/domain/research";
 import { SourceManager } from "@/features/research/source-manager";
 import { sourceMatchesDevice } from "@/features/research/device-match";
+import { generateGraphAssets } from "@/features/local-reconstruction/silhouette-geometry";
 import { DeviceSetup } from "@/features/workspace/device-setup";
 import { ProjectWorkflow } from "@/features/workspace/project-workflow";
 import { db } from "@/storage/indexed-db/db";
@@ -77,6 +85,12 @@ export function ViewerPanel({
   const [assemblyDiagnostics, setAssemblyDiagnostics] = useState<
     readonly AssemblyDiagnostic[]
   >([]);
+  const [reconstructionGraph, setReconstructionGraph] =
+    useState<ReconstructionGraph | null>(null);
+  const [graphCompiling, setGraphCompiling] = useState(false);
+  const [graphError, setGraphError] = useState("");
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [highlightedPartIds, setHighlightedPartIds] = useState<string[]>([]);
   const [viewSource, setViewSource] = useState<"project" | "demo">(
     initialViewSource,
   );
@@ -129,6 +143,22 @@ export function ViewerPanel({
   const componentEvidence = project.evidence.filter((item) =>
     componentEvidenceIds.has(item.id),
   );
+  const graphPart = reconstructionGraph?.parts.find(
+    (part) => part.id === selected,
+  );
+  const graphEvidenceIds = new Set(
+    graphPart ? Object.values(graphPart.evidence).flat() : [],
+  );
+  const graphEvidence =
+    reconstructionGraph?.evidence.filter((item) =>
+      graphEvidenceIds.has(item.id),
+    ) ?? [];
+  const graphRelations =
+    reconstructionGraph?.relations.filter(
+      (relation) =>
+        relation.sourcePartId === selected ||
+        relation.targetPartId === selected,
+    ) ?? [];
   const analysis = activeRun?.observations ?? null;
 
   useEffect(() => {
@@ -149,6 +179,7 @@ export function ViewerPanel({
         .count(),
       db.researchSources.where("projectId").equals(PROJECT_ID).toArray(),
       db.assemblyManifests.where("projectId").equals(PROJECT_ID).toArray(),
+      db.metaJobs.where("projectId").equals(PROJECT_ID).toArray(),
     ])
       .then(
         ([
@@ -157,6 +188,7 @@ export function ViewerPanel({
           savedPhotoCount,
           sourceRecords,
           assemblyRecords,
+          graphRecords,
         ]) => {
           if (!active) return;
           const savedProject = projectSchema.safeParse(projectRecord?.data);
@@ -201,6 +233,10 @@ export function ViewerPanel({
           const restoredManifest = assemblyManifestSchema.safeParse(
             latestAssemblyRecord?.data,
           );
+          const restoredGraph = [...graphRecords]
+            .sort((left, right) => right.updatedAt - left.updatedAt)
+            .map((record) => reconstructionGraphSchema.safeParse(record.data))
+            .find((result) => result.success);
           const contextProject =
             restoredRun?.resolvedProject && !manualProjectIsNewer
               ? restoredRun.resolvedProject
@@ -223,9 +259,14 @@ export function ViewerPanel({
                   evidence: contextProject.evidence,
                 }),
               );
+              setSceneMode("assembled");
+              setPartsOpen(true);
             } catch {
               // A stale assembly never replaces a valid evidence project.
             }
+          }
+          if (restoredGraph?.success) {
+            setReconstructionGraph(restoredGraph.data);
           }
           setPhotoCount(savedPhotoCount);
           setSetupOpen(
@@ -292,6 +333,7 @@ export function ViewerPanel({
   function selectComponent(id: string) {
     setSelected(id || null);
     setInspectorOpen(Boolean(id));
+    setHighlightedPartIds([]);
     if (!id) setIsolated(false);
   }
 
@@ -314,6 +356,7 @@ export function ViewerPanel({
       setInspectorOpen(false);
       setPartsOpen(false);
       setSceneMode("bench");
+      setHighlightedPartIds([]);
     }
   }
 
@@ -326,16 +369,19 @@ export function ViewerPanel({
     setArrangeKey((value) => value + 1);
     setSceneMode("bench");
     setIsolated(false);
+    setHighlightedPartIds([]);
   }
 
   function rebuildDevice() {
     setSceneMode("assembled");
     setIsolated(false);
+    setHighlightedPartIds([]);
   }
 
   function showExplodedView() {
     setSceneMode("exploded");
     setIsolated(false);
+    setHighlightedPartIds([]);
   }
 
   function showProject(nextSource: "project" | "demo") {
@@ -354,6 +400,7 @@ export function ViewerPanel({
         db.projects,
         db.researchSources,
         db.assemblyManifests,
+        db.metaJobs,
         async () => {
           await db.projects.put({
             id: PROJECT_ID,
@@ -369,6 +416,7 @@ export function ViewerPanel({
             .where("projectId")
             .equals(PROJECT_ID)
             .delete();
+          await db.metaJobs.where("projectId").equals(PROJECT_ID).delete();
         },
       );
       setBaseProject(nextProject);
@@ -377,6 +425,7 @@ export function ViewerPanel({
       setAssemblyManifest(null);
       setAssemblyProject(null);
       setAssemblyDiagnostics([]);
+      setReconstructionGraph(null);
       setViewSource("project");
       setSetupOpen(false);
       setSetupError("");
@@ -417,6 +466,7 @@ export function ViewerPanel({
     manifest: AssemblyManifest,
     diagnostics: readonly AssemblyDiagnostic[],
     activateViewer = true,
+    graph?: ReconstructionGraph,
   ) {
     const contextProject =
       resolvedProject ?? baseProject ?? emptyProject(project.device);
@@ -428,6 +478,7 @@ export function ViewerPanel({
     setAssemblyManifest(manifest);
     setAssemblyProject(nextProject);
     setAssemblyDiagnostics(diagnostics);
+    if (graph) setReconstructionGraph(graph);
     setViewSource("project");
     setWorkflowOpen(false);
     setSelected(null);
@@ -446,6 +497,153 @@ export function ViewerPanel({
         data: manifest,
       })
       .catch(() => undefined);
+    if (graph) {
+      void db.metaJobs
+        .put({
+          id: graph.id,
+          projectId: PROJECT_ID,
+          status: "succeeded",
+          updatedAt: Date.now(),
+          data: graph,
+        })
+        .catch(() => undefined);
+    }
+  }
+
+  function inspectDiagnostic(diagnostic: AssemblyDiagnostic) {
+    const [firstPartId] = diagnostic.partIds;
+    setHighlightedPartIds([...diagnostic.partIds]);
+    setSelected(firstPartId ?? null);
+    setInspectorOpen(Boolean(firstPartId));
+    setDiagnosticsOpen(false);
+    setSceneMode("assembled");
+    setIsolated(true);
+    setResetKey((value) => value + 1);
+  }
+
+  async function updateGraphPart(
+    partId: string,
+    update: (
+      part: ReconstructionGraph["parts"][number],
+    ) => ReconstructionGraph["parts"][number],
+  ) {
+    if (!reconstructionGraph || graphCompiling) return;
+    setGraphCompiling(true);
+    setGraphError("");
+    try {
+      const nextGraph = validateReconstructionGraph({
+        ...reconstructionGraph,
+        parts: reconstructionGraph.parts.map((part) =>
+          part.id === partId ? update(part) : part,
+        ),
+      });
+      const assets = await generateGraphAssets(nextGraph);
+      const manifest = compileReconstructionGraph(nextGraph, assets);
+      const diagnostics = diagnoseAssembly(manifest);
+      const contextProject =
+        resolvedProject ?? baseProject ?? emptyProject(project.device);
+      const nextProject = assemblyManifestToProject(manifest, {
+        projectId: PROJECT_ID,
+        device: contextProject.device,
+        evidence: contextProject.evidence,
+      });
+      setReconstructionGraph(nextGraph);
+      setAssemblyManifest(manifest);
+      setAssemblyProject(nextProject);
+      setAssemblyDiagnostics(diagnostics);
+      setViewSource("project");
+      await Promise.all([
+        db.metaJobs.put({
+          id: nextGraph.id,
+          projectId: PROJECT_ID,
+          status: "succeeded",
+          updatedAt: Date.now(),
+          data: nextGraph,
+        }),
+        db.assemblyManifests.put({
+          id: manifest.id,
+          projectId: PROJECT_ID,
+          updatedAt: Date.now(),
+          data: manifest,
+        }),
+      ]);
+      setResetKey((value) => value + 1);
+    } catch (error) {
+      setGraphError(
+        error instanceof Error ? error.message : "Graph recompilation failed.",
+      );
+    } finally {
+      setGraphCompiling(false);
+    }
+  }
+
+  function graphPartHalfExtents(
+    part: ReconstructionGraph["parts"][number],
+  ): [number, number, number] {
+    if (part.geometry.kind === "primitive") {
+      return part.geometry.dimensionsMm.map((value) => value / 2) as [
+        number,
+        number,
+        number,
+      ];
+    }
+    if (part.geometry.kind === "mesh-reference") {
+      const bounds = part.geometry.boundsMm;
+      return [0, 1, 2].map(
+        (axis) => (bounds.maxMm[axis] - bounds.minMm[axis]) / 2,
+      ) as [number, number, number];
+    }
+    const xs = part.geometry.profileMm.map((point) => point[0]);
+    const ys = part.geometry.profileMm.map((point) => point[1]);
+    return [
+      (Math.max(...xs) - Math.min(...xs)) / 2,
+      (Math.max(...ys) - Math.min(...ys)) / 2,
+      part.geometry.depthMm / 2,
+    ];
+  }
+
+  function autoAdjustDiagnostic(diagnostic: AssemblyDiagnostic) {
+    if (!reconstructionGraph || graphCompiling) return;
+    const [sourceId, targetId] = diagnostic.partIds;
+    const source = reconstructionGraph.parts.find(
+      (part) => part.id === sourceId,
+    );
+    if (!source) return;
+
+    void updateGraphPart(source.id, (part) => {
+      const position = [...part.transform.positionMm] as [
+        number,
+        number,
+        number,
+      ];
+      if (diagnostic.code === "aabb-overlap" && targetId) {
+        const target = reconstructionGraph.parts.find(
+          (candidate) => candidate.id === targetId,
+        );
+        if (target) {
+          const sourceHalf = graphPartHalfExtents(part);
+          const targetHalf = graphPartHalfExtents(target);
+          position[2] =
+            target.transform.positionMm[2] +
+            targetHalf[2] +
+            sourceHalf[2] +
+            0.5;
+        }
+      } else {
+        const half = graphPartHalfExtents(part);
+        const bounds = reconstructionGraph.assemblyBoundsMm;
+        position.forEach((value, axis) => {
+          position[axis] = Math.min(
+            bounds.maxMm[axis] - half[axis],
+            Math.max(bounds.minMm[axis] + half[axis], value),
+          );
+        });
+      }
+      return {
+        ...part,
+        transform: { ...part.transform, positionMm: position },
+      };
+    });
   }
 
   const projectTitle = isDemo
@@ -473,7 +671,7 @@ export function ViewerPanel({
           onClick={onExit}
           aria-label="Return to home"
         >
-          <span>E</span>
+          <Image src="/icon.svg" alt="" width={34} height={34} priority />
           <strong>EIDA</strong>
         </button>
         <div className="viewer-project">
@@ -545,6 +743,7 @@ export function ViewerPanel({
         showGrid={showGrid}
         reducedGraphics={reducedGraphics}
         resetKey={resetKey}
+        warningPartIds={highlightedPartIds}
         onSelect={selectComponent}
         onReady={() => setSceneReady(true)}
       />
@@ -585,6 +784,20 @@ export function ViewerPanel({
           </h2>
         </div>
         <div className="scene-mode-actions" aria-label="Part arrangement">
+          {assemblyDiagnostics.length > 0 && (
+            <button
+              type="button"
+              className={
+                diagnosticsOpen
+                  ? "is-active diagnostics-trigger"
+                  : "diagnostics-trigger"
+              }
+              onClick={() => setDiagnosticsOpen((value) => !value)}
+            >
+              <span aria-hidden="true">!</span>
+              <small>{assemblyDiagnostics.length} issues</small>
+            </button>
+          )}
           <button
             type="button"
             className={sceneMode === "bench" ? "is-active" : ""}
@@ -612,8 +825,72 @@ export function ViewerPanel({
             <span aria-hidden="true">↺</span>
             <small>Rebuild</small>
           </button>
+          <button
+            type="button"
+            onClick={() => setResetKey((value) => value + 1)}
+            disabled={project.components.length === 0}
+          >
+            <span aria-hidden="true">⌖</span>
+            <small>Fit</small>
+          </button>
         </div>
       </GlassPanel>
+
+      {diagnosticsOpen && assemblyDiagnostics.length > 0 && (
+        <GlassPanel
+          className="diagnostics-panel"
+          reducedGraphics={reducedGraphics}
+        >
+          <div className="panel-heading">
+            <div>
+              <span className="panel-kicker">Spatial validation</span>
+              <h3>Review geometry conflicts</h3>
+            </div>
+            <button
+              type="button"
+              className="panel-close"
+              onClick={() => setDiagnosticsOpen(false)}
+              aria-label="Close diagnostics"
+            >
+              ×
+            </button>
+          </div>
+          <p className="diagnostics-intro">
+            Select a conflict to isolate the affected parts and correct their
+            graph properties.
+          </p>
+          <ol className="diagnostics-list">
+            {assemblyDiagnostics.map((diagnostic, index) => (
+              <li
+                key={`${diagnostic.code}:${diagnostic.partIds.join(":")}:${index}`}
+              >
+                <div>
+                  <span>{diagnostic.code.replaceAll("-", " ")}</span>
+                  <strong>{diagnostic.message}</strong>
+                  <small>{diagnostic.partIds.join(" ↔ ")}</small>
+                </div>
+                <div className="diagnostic-actions">
+                  <button
+                    type="button"
+                    onClick={() => inspectDiagnostic(diagnostic)}
+                  >
+                    Inspect
+                  </button>
+                  {reconstructionGraph && (
+                    <button
+                      type="button"
+                      onClick={() => autoAdjustDiagnostic(diagnostic)}
+                      disabled={graphCompiling}
+                    >
+                      Adjust
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </GlassPanel>
+      )}
 
       {partsOpen && project.components.length > 0 && (
         <GlassPanel className="parts-panel" reducedGraphics={reducedGraphics}>
@@ -730,9 +1007,173 @@ export function ViewerPanel({
                 </div>
                 <div>
                   <span>Sources</span>
-                  <strong>{componentEvidence.length} evidence item</strong>
+                  <strong>
+                    {componentEvidence.length + graphEvidence.length} evidence
+                    item
+                    {componentEvidence.length + graphEvidence.length === 1
+                      ? ""
+                      : "s"}
+                  </strong>
                 </div>
               </div>
+              {graphPart && (
+                <div className="graph-editor">
+                  <div className="graph-editor__heading">
+                    <div>
+                      <span>EIDA graph recipe</span>
+                      <strong>{graphPart.geometry.kind}</strong>
+                    </div>
+                    <small>{graphCompiling ? "Compiling…" : "Live"}</small>
+                  </div>
+                  <fieldset disabled={graphCompiling}>
+                    <legend>Position · mm</legend>
+                    <div className="graph-vector-fields">
+                      {(["X", "Y", "Z"] as const).map((axis, index) => (
+                        <label
+                          key={`${graphPart.id}:${axis}:${graphPart.transform.positionMm[index]}`}
+                        >
+                          {axis}
+                          <input
+                            type="number"
+                            step="0.5"
+                            defaultValue={graphPart.transform.positionMm[index]}
+                            onBlur={(event) => {
+                              const value = Number(event.currentTarget.value);
+                              if (!Number.isFinite(value)) return;
+                              void updateGraphPart(graphPart.id, (part) => ({
+                                ...part,
+                                transform: {
+                                  ...part.transform,
+                                  positionMm: part.transform.positionMm.map(
+                                    (current, currentIndex) =>
+                                      currentIndex === index ? value : current,
+                                  ) as [number, number, number],
+                                },
+                              }));
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                  {graphPart.geometry.kind !== "mesh-reference" && (
+                    <fieldset disabled={graphCompiling}>
+                      <legend>Dimensions · mm</legend>
+                      <div className="graph-vector-fields">
+                        {(["W", "H", "D"] as const).map((axis, index) => {
+                          const value =
+                            graphPartHalfExtents(graphPart)[index] * 2;
+                          return (
+                            <label
+                              key={`${graphPart.id}:size:${axis}:${value}`}
+                            >
+                              {axis}
+                              <input
+                                type="number"
+                                min="0.1"
+                                step="0.5"
+                                defaultValue={Number(value.toFixed(2))}
+                                onBlur={(event) => {
+                                  const nextValue = Number(
+                                    event.currentTarget.value,
+                                  );
+                                  if (
+                                    !Number.isFinite(nextValue) ||
+                                    nextValue <= 0
+                                  )
+                                    return;
+                                  void updateGraphPart(graphPart.id, (part) => {
+                                    if (part.geometry.kind === "primitive") {
+                                      return {
+                                        ...part,
+                                        geometry: {
+                                          ...part.geometry,
+                                          dimensionsMm:
+                                            part.geometry.dimensionsMm.map(
+                                              (current, currentIndex) =>
+                                                currentIndex === index
+                                                  ? nextValue
+                                                  : current,
+                                            ) as [number, number, number],
+                                        },
+                                      };
+                                    }
+                                    if (
+                                      part.geometry.kind === "profile-extrusion"
+                                    ) {
+                                      if (index === 2) {
+                                        return {
+                                          ...part,
+                                          geometry: {
+                                            ...part.geometry,
+                                            depthMm: nextValue,
+                                          },
+                                        };
+                                      }
+                                      const currentSize =
+                                        graphPartHalfExtents(part)[index] * 2;
+                                      const scale = nextValue / currentSize;
+                                      return {
+                                        ...part,
+                                        geometry: {
+                                          ...part.geometry,
+                                          profileMm:
+                                            part.geometry.profileMm.map(
+                                              ([x, y]) =>
+                                                index === 0
+                                                  ? ([x * scale, y] as [
+                                                      number,
+                                                      number,
+                                                    ])
+                                                  : ([x, y * scale] as [
+                                                      number,
+                                                      number,
+                                                    ]),
+                                            ),
+                                        },
+                                      };
+                                    }
+                                    return part;
+                                  });
+                                }}
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  )}
+                  {graphError && (
+                    <p className="graph-editor__error">{graphError}</p>
+                  )}
+                  {graphPart.assumptions.length > 0 && (
+                    <div className="graph-assumptions">
+                      <span>Assumptions to review</span>
+                      <ul>
+                        {graphPart.assumptions.map((assumption) => (
+                          <li key={assumption.id}>
+                            <strong>{assumption.property}</strong>
+                            {assumption.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {graphRelations.length > 0 && (
+                    <div className="graph-assumptions">
+                      <span>Assembly relations</span>
+                      <ul>
+                        {graphRelations.map((relation) => (
+                          <li key={relation.id}>
+                            <strong>{relation.kind}</strong>
+                            {relation.sourcePartId} → {relation.targetPartId}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="inspector-actions">
                 <button
                   type="button"
@@ -762,16 +1203,41 @@ export function ViewerPanel({
               <EvidenceLegend />
               {isDemo ? (
                 <p>Demo scene with no linked evidence.</p>
-              ) : componentEvidence.length > 0 ? (
-                <ul className="evidence-source-list">
-                  {componentEvidence.map((item) => (
-                    <li key={item.id}>
-                      <strong>{item.kind}</strong>
-                      <span>{item.description}</span>
-                      <small>{item.locator ?? item.sourceId}</small>
-                    </li>
-                  ))}
-                </ul>
+              ) : componentEvidence.length > 0 || graphEvidence.length > 0 ? (
+                <>
+                  <ul className="evidence-source-list">
+                    {graphEvidence.map((item) => (
+                      <li key={item.id}>
+                        <strong>{item.kind}</strong>
+                        <span>{item.label}</span>
+                        <small>
+                          {item.confidence !== undefined
+                            ? `${Math.round(item.confidence * 100)}% confidence`
+                            : (item.locator ?? item.sourceId ?? item.id)}
+                        </small>
+                      </li>
+                    ))}
+                    {componentEvidence.map((item) => (
+                      <li key={item.id}>
+                        <strong>{item.kind}</strong>
+                        <span>{item.description}</span>
+                        <small>{item.locator ?? item.sourceId}</small>
+                      </li>
+                    ))}
+                  </ul>
+                  {graphPart && (
+                    <div className="property-evidence-map">
+                      {Object.entries(graphPart.evidence).map(
+                        ([property, ids]) => (
+                          <div key={property}>
+                            <span>{property}</span>
+                            <strong>{ids.length} linked</strong>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  )}
+                </>
               ) : (
                 <p>No admissible source is linked to this component.</p>
               )}
