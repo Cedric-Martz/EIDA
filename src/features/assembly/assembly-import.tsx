@@ -9,6 +9,12 @@ import {
   type AssemblyDiagnostic,
   type AssemblyManifest,
 } from "@/domain/assembly";
+import {
+  compileReconstructionGraph,
+  ReconstructionGraphValidationError,
+  validateReconstructionGraph,
+} from "@/domain/reconstruction-graph";
+import { generateGraphAssets } from "@/features/local-reconstruction/silhouette-geometry";
 import styles from "./assembly-import.module.css";
 
 export type ParsedAssemblyManifest = {
@@ -36,6 +42,24 @@ export function parseAssemblyManifestJson(
   return { manifest, diagnostics: diagnoseAssembly(manifest) };
 }
 
+export async function parseReconstructionJson(
+  json: string,
+): Promise<ParsedAssemblyManifest> {
+  const input: unknown = JSON.parse(json);
+  if (
+    typeof input === "object" &&
+    input !== null &&
+    "schema" in input &&
+    input.schema === "eida-reconstruction-graph"
+  ) {
+    const graph = validateReconstructionGraph(input);
+    const assets = await generateGraphAssets(graph);
+    const manifest = compileReconstructionGraph(graph, assets);
+    return { manifest, diagnostics: diagnoseAssembly(manifest) };
+  }
+  return parseAssemblyManifestJson(json);
+}
+
 export function formatAssemblyImportError(error: unknown): string {
   if (error instanceof SyntaxError) {
     return "The selected file is not valid JSON.";
@@ -45,6 +69,12 @@ export function formatAssemblyImportError(error: unknown): string {
     return issue
       ? `Invalid assembly manifest at ${issue.path}: ${issue.message}`
       : "The assembly manifest contains invalid references.";
+  }
+  if (error instanceof ReconstructionGraphValidationError) {
+    const issue = error.issues[0];
+    return issue
+      ? `Invalid EIDA graph at ${issue.path}: ${issue.message}`
+      : "The EIDA reconstruction graph contains invalid references.";
   }
   if (error instanceof ZodError) {
     const issue = error.issues[0];
@@ -120,7 +150,7 @@ export function AssemblyImport({
       if (requestId.current !== currentRequestId) return;
       if (!text.trim()) throw new Error("The selected JSON file is empty.");
 
-      const result = parseAssemblyManifestJson(text);
+      const result = await parseReconstructionJson(text);
       if (requestId.current !== currentRequestId) return;
       setState({
         status: "success",
@@ -145,12 +175,12 @@ export function AssemblyImport({
         <div>
           <h2 id={titleId}>{title}</h2>
           <p id={descriptionId}>
-            Select a version 1 JSON manifest. Validation happens locally in your
-            browser before it is handed to the project.
+            Select a version 1 assembly manifest or an editable .eida.json
+            reconstruction graph. Validation and compilation happen locally.
           </p>
         </div>
         <span className={styles.format} aria-label="Accepted format: JSON">
-          JSON · v1
+          JSON · EIDA v1
         </span>
       </div>
 
@@ -159,7 +189,7 @@ export function AssemblyImport({
           className={styles.fileInput}
           id={inputId}
           type="file"
-          accept="application/json,.json"
+          accept="application/json,.json,.eida.json"
           aria-describedby={descriptionId}
           disabled={disabled || state.status === "reading"}
           onChange={importFile}

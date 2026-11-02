@@ -24,10 +24,11 @@ The local Next.js server exposes four same-origin routes:
 The browser then reprojects each contour into the source image, scales it from
 the reference device envelope (or a complete high-confidence documented
 dimension), simplifies it and extrudes it into a binary GLB. Geometry
-generation and assembly validation are local and need no GPU worker. Processing
-is sequential and only accepted visible masks become geometry.
-The former `services/meta-pipeline` contract remains an experimental path, not a
-runtime dependency.
+generation and assembly validation are local. Processing is sequential and only
+accepted visible masks become component geometry. When enabled, the narrower
+`services/mapanything-worker` runs the official Apache MapAnything script in
+parallel and returns a metric scene GLB plus a report. The former
+`services/meta-pipeline` contract remains an experimental full-pipeline path.
 
 The key comes from server-only `MODEL_API_KEY` in `.env.local`, or from a form
 field sent only to the local route through `x-eida-meta-key`. The latter stays in
@@ -40,17 +41,18 @@ image contour cannot establish hidden surfaces, depth or metrological scale.
 
 ## Limitations and cost boundary
 
-No paid search API, hosted GPU, photogrammetry/CAD service, database, object
-storage or queue is used. Muse/SAM therefore depend on user/hackathon credits
-and provider availability; extraction, contour processing, GLB generation and
-rendering run on the local machine.
+No paid search API, database or object storage is required. Muse/SAM depend on
+user credits and provider availability. Optional MapAnything compute comes from
+the user's machine or a separately supplied free GPU session; its cost is never
+charged to Meta Model API credits. Contour processing, graph compilation and
+rendering remain local.
 
-PDF text extraction, OCR, CAD parsing, automatic multi-view registration,
-image downloading/analysis, input-token preflight, monetary budget enforcement
-and textured hidden surfaces are not implemented. Technical files are indexed
-as links, not parsed. A ruler, known dimension, measured drawing or imported
-CAD still materially improves scale and fit. A protected remote backend would
-be required for a public multi-user deployment with shared credentials,
+MapAnything now provides optional multi-view registration and a scene-level
+metric reference. Per-component mesh fitting, textured hidden surfaces, PDF
+text extraction, OCR, input-token preflight and monetary budget enforcement are
+not implemented. A ruler, known dimension, measured drawing or imported CAD
+still materially improves scale and fit. A protected remote backend would be
+required for a public multi-user deployment with shared credentials,
 authentication and server-enforced quotas.
 
 ## Security note

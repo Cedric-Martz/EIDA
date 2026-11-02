@@ -1,9 +1,9 @@
 # EIDA research worker
 
-Optional future companion service for a static GitHub Pages application. The
+Optional companion service for a static GitHub Pages application. The
 current local Next.js route already extracts approved public pages without this
-worker. The frontend remains usable without either service; this worker would
-add server-side source discovery and normalized iFixit guide ingestion.
+worker. The frontend remains usable without either service; this worker adds
+server-side multi-source discovery and normalized iFixit guide ingestion.
 
 ## Routes
 
@@ -12,7 +12,9 @@ add server-side source discovery and normalized iFixit guide ingestion.
 - `GET /v1/ifixit/guides/:guideId`
 
 The worker always searches the public iFixit API. Set the
-`BRAVE_SEARCH_API_KEY` secret to add general web results:
+`BRAVE_SEARCH_API_KEY` secret to add targeted searches for service manuals,
+technical drawings, FCC/internal photographs, GitHub hardware repositories and
+CAD libraries such as GrabCAD, 3D ContentCentral and TraceParts:
 
 ```bash
 npx wrangler secret put BRAVE_SEARCH_API_KEY
@@ -28,7 +30,9 @@ build as `NEXT_PUBLIC_EIDA_RESEARCH_API`.
 
 ## Boundaries
 
-The service returns links and structured guide steps; it does not claim that a
-guide contains measured CAD. iFixit results retain their CC BY-NC-SA 3.0
-licence marker. Results from the open web default to an unknown licence and
-must be reviewed before ingestion or redistribution.
+The service returns links and structured guide steps. The local extraction
+route may download up to three CAD links from each explicitly approved source,
+with a 12 MB per-file limit, and parse ASCII STEP/DXF bounds. It fingerprints
+the bytes but does not retain the downloaded file. iFixit results retain their
+CC BY-NC-SA 3.0 licence marker. Results from the open web default to an unknown
+licence and must be reviewed before ingestion or redistribution.

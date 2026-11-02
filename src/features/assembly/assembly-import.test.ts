@@ -6,6 +6,7 @@ import {
   AssemblyImport,
   formatAssemblyImportError,
   parseAssemblyManifestJson,
+  parseReconstructionJson,
 } from "./assembly-import";
 
 function manifest(): AssemblyManifest {
@@ -87,6 +88,61 @@ describe("assembly manifest JSON import", () => {
     }
   });
 
+  it("compiles a portable EIDA primitive graph", async () => {
+    const result = await parseReconstructionJson(
+      JSON.stringify({
+        schema: "eida-reconstruction-graph",
+        schemaVersion: 1,
+        id: "graph-import",
+        projectId: "project-import",
+        label: "Imported graph",
+        units: "mm",
+        coordinateSystem: "right-handed-y-up",
+        createdAt: 1,
+        assemblyBoundsMm: {
+          minMm: [-20, -20, -20],
+          maxMm: [20, 20, 20],
+        },
+        evidence: [],
+        parts: [
+          {
+            id: "housing",
+            label: "Housing",
+            category: "housing",
+            geometry: {
+              kind: "primitive",
+              primitive: "rounded_box",
+              dimensionsMm: [30, 20, 4],
+              cornerRadiusMm: 2,
+            },
+            transform: {
+              positionMm: [0, 0, 0],
+              rotationRad: [0, 0, 0],
+              scale: [1, 1, 1],
+            },
+            explodedVectorMm: [0, 0, 10],
+            fidelity: "estimated",
+            evidence: {
+              presence: [],
+              outline: [],
+              dimensions: [],
+              depth: [],
+              transform: [],
+              material: [],
+            },
+            assumptions: [],
+          },
+        ],
+        relations: [],
+      }),
+    );
+
+    expect(result.manifest.parts[0]?.geometry).toMatchObject({
+      kind: "parametric",
+      primitive: "rounded_box",
+    });
+  });
+
   it("renders a labelled and described native file input", () => {
     const html = renderToStaticMarkup(
       createElement(AssemblyImport, {
@@ -94,7 +150,7 @@ describe("assembly manifest JSON import", () => {
       }),
     );
     expect(html).toContain('type="file"');
-    expect(html).toContain('accept="application/json,.json"');
+    expect(html).toContain('accept="application/json,.json,.eida.json"');
     expect(html).toContain("aria-describedby=");
     expect(html).toContain("<label");
     expect(html).toContain("Choose manifest");

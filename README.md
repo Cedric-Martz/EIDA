@@ -10,8 +10,9 @@ The application is local-first and now has one reconstruction studio. The same s
 2. The local server fetches the approved public HTTPS pages, extracts relevant text, documented dimensions, source images and links to technical files, then sends that evidence snapshot to Muse.
 3. **Muse Spark 1.3** reads the approved context and up to six photos to produce a conservative part inventory and a SAM prompt for each part.
 4. **SAM 3.1** returns pixel masks for those visible parts through the Meta Model API, one accepted part at a time.
-5. **EIDA local geometry** simplifies the actual mask contours, scales them from the known device envelope, extrudes them and exports GLB assets in the browser.
-6. **EIDA validation** assembles the parts and reports overlap, envelope and fidelity warnings before opening the viewer.
+5. **MapAnything Apache (optional)** receives 3–8 views through a local or free-compute worker, registers their cameras and exports a metric scene GLB in parallel.
+6. **EIDA local geometry** simplifies the actual mask contours, scales them from the known device envelope, extrudes them and exports GLB assets in the browser.
+7. **EIDA validation** links the metric scene as spatial evidence, assembles the editable parts and reports spatial diagnostics before opening the viewer.
 
 This produces substantially better silhouettes than generic boxes and genuinely uses the hackathon’s hosted Meta models. It is still not photogrammetry or measured CAD: depth, hidden faces and exact placement remain estimated unless the project includes measurements or CAD assets.
 
@@ -38,13 +39,15 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000), create or reopen a project, then click **Meta reconstruction**. Alternatively, leave `.env.local` empty and paste the key into the studio; it can be retained only for the current browser tab.
 
+For metric multi-view registration, follow the worker setup in [`services/mapanything-worker`](services/mapanything-worker/README.md), start it on port 8001, then enable **Add metric multi-view registration** in the reconstruction studio.
+
 Do not expose the development server to the public internet. Production-like local use is available with `npm run build && npm start`.
 
 ## Cost and hardware boundary
 
 - Muse and SAM calls consume only the Meta Model API credits attached to the hackathon account.
 - Contour processing, GLB generation, assembly validation, storage and rendering run on the local computer.
-- No paid search API, hosted database, cloud storage, GPU rental, pod or worker is required by the current local path.
+- No paid search API, hosted database or cloud storage is required. MapAnything is optional and can run on owned hardware, CPU fallback or a free GPU session.
 - Standard Muse is selected by default. The contributor/training-sharing variant is an explicit choice and remains subject to Meta's current terms.
 - The former `services/meta-pipeline` and `services/research-worker` contracts are optional research material; they are not required by this workflow.
 - Without Meta credits or a valid user-provided key, the evidence viewer and synthetic demo remain usable, but live inventory and segmentation cannot run.
@@ -56,6 +59,7 @@ Do not expose the development server to the public internet. Production-like loc
 - One-page workflow configuration and live per-stage status.
 - Official `@meta-sam/parser` decoding of streamed SAM 3.1 masks.
 - Local GLB generation from real mask outlines.
+- Optional asynchronous MapAnything scene reconstruction with health checking, job polling, artifact links and automatic local fallback.
 - Assembly, exploded and workbench layouts with keyboard, mouse and touch navigation.
 - Evidence/fidelity labels and deterministic spatial diagnostics.
 - Versioned Zod schemas, local persistence and unit tests.
@@ -67,13 +71,13 @@ Do not expose the development server to the public internet. Production-like loc
 npm run check
 ```
 
-The main application needs a local Next.js server because it proxies the Meta key, fetches approved sources and normalizes Model API responses. It is not the GitHub Pages deployment. GitHub Pages is reserved for a static documentation/landing page and a clearly labelled synthetic 3D demo; it must not contain live reconstruction routes or a shared API key.
+The main application needs a local Next.js server because it proxies the Meta key, fetches approved sources and normalizes Model API responses. It is not the GitHub Pages deployment. GitHub Pages contains a short landing page and a dedicated `/documentation/` route; it never contains live reconstruction routes or a shared API key.
 
 The current GitHub Actions workflow validates the application but does not publish that static showcase yet. A future Pages build must use a separate static entry point and fixture assets, never the live API routes.
 
 ## Current limitations
 
-- The extractor reads HTML/text pages and indexes images and links to PDF/CAD/archive files. PDF text, CAD geometry, image downloads, multi-view registration and document OCR are not implemented.
+- The extractor reads HTML/text pages and indexes images and links to PDF/CAD/archive files. PDF text, image downloads and document OCR are not implemented. MapAnything now provides an optional registered metric scene, but per-component fitting still comes from the editable EIDA graph.
 - A complete, high-confidence three-value dimension found in approved text can set the device envelope automatically. Otherwise the envelope is a user-confirmed estimate.
 - Muse and SAM can only use the first six local photos for the current launch. The browser sends the approved photos and the evidence snapshot to the configured Meta account.
 - Masks provide visible 2D outlines, not hidden surfaces, reliable depth, material properties, fasteners, or measured CAD. Extrusion, placement and thickness remain estimates unless documented.

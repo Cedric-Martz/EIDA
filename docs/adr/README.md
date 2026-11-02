@@ -17,3 +17,5 @@ Status: Accepted unless noted. Revisit by adding a superseding ADR rather than s
   (superseded for live reconstruction by ADR-013).
 - 013 Evidence-resolved local reconstruction through a visitor-owned key and
   local Next.js proxy.
+- 014 EIDA Reconstruction Graph as the editable source between model output and
+  rendered geometry.
