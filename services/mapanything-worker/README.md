@@ -1,7 +1,7 @@
 # EIDA MapAnything worker
 
 This optional worker runs Meta's official Apache-licensed MapAnything checkpoint
-outside the browser. It accepts 3–8 views, queues one reconstruction and returns
+outside the browser. It accepts 3-8 views, queues one reconstruction and returns
 a metric scene GLB plus a small run report. EIDA keeps using its editable graph
 for component geometry; the MapAnything scene is stored as spatial evidence.
 

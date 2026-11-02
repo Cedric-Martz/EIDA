@@ -1,29 +1,30 @@
 import type { ComponentNode } from "@/domain/evidence/schema";
+import { EidaIcon, type IconName } from "@/components/ui/eida-icon";
 
 type EvidenceStatus = ComponentNode["claims"][number]["status"];
 
 const statusContent: Record<
   EvidenceStatus,
-  { label: string; symbol: string; description: string }
+  { label: string; icon: IconName; description: string }
 > = {
   observed: {
     label: "Observed",
-    symbol: "●",
+    icon: "check",
     description: "Visible in a photograph or measurement.",
   },
   documented: {
     label: "Documented",
-    symbol: "▣",
+    icon: "paper",
     description: "Supported by an identified source.",
   },
   inferred: {
     label: "Estimated",
-    symbol: "◐",
+    icon: "info",
     description: "A hypothesis that still needs confirmation.",
   },
   unknown: {
     label: "Unknown",
-    symbol: "◇",
+    icon: "link",
     description: "No admissible evidence is available.",
   },
 };
@@ -35,7 +36,7 @@ export function EvidenceBadge({ status }: { status: EvidenceStatus }) {
       className={`evidence-badge evidence-badge--${status}`}
       title={content.description}
     >
-      <span aria-hidden="true">{content.symbol}</span>
+      <EidaIcon name={content.icon} size={13} />
       {content.label}
     </span>
   );

@@ -8,6 +8,7 @@ import {
   useState,
   type MouseEvent,
 } from "react";
+import { EidaIcon } from "@/components/ui/eida-icon";
 import {
   diagnoseAssembly,
   type AssemblyDiagnostic,
@@ -277,7 +278,7 @@ export function ReconstructionWorkflowDrawer({
             onClick={onClose}
             aria-label="Close reconstruction workflow"
           >
-            <span aria-hidden="true">×</span>
+            <EidaIcon name="close" size={16} />
           </button>
         </header>
 
@@ -345,7 +346,7 @@ export function ReconstructionWorkflowDrawer({
               <ul className={styles.warningList}>
                 {plan.warnings.map((warning) => (
                   <li key={warning}>
-                    <span aria-hidden="true">!</span>
+                    <EidaIcon name="alert" size={15} />
                     <p>{warning}</p>
                   </li>
                 ))}
@@ -384,7 +385,7 @@ export function ReconstructionWorkflowDrawer({
                         title={source.title}
                       >
                         {source.title}
-                        <span aria-hidden="true">↗</span>
+                        <EidaIcon name="external" size={14} />
                       </a>
                     </div>
                     <div className={styles.sourceMeta}>
@@ -499,7 +500,7 @@ export function ReconstructionWorkflowDrawer({
                   <small>Local · estimated</small>
                   {generating ? "Generating…" : "Generate 3D draft"}
                 </span>
-                <b aria-hidden="true">→</b>
+                <EidaIcon name="arrow-right" size={18} />
               </button>
               <button
                 className={styles.exportButton}

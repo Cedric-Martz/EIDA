@@ -2,19 +2,19 @@
 
 **Evidence-based Intelligence for Disassembly & Analysis.** EIDA turns reviewed repair sources and device photographs into an auditable, interactive 3D exploded view.
 
-The application is local-first and now has one reconstruction studio. The same screen contains Meta access, approved sources, photo intake, dimensions, live AI stages and the final launch button. The current path uses a local Next.js server for the provider proxy; it does not require a rented GPU, pod or separate worker.
+The application is local-first and uses a single reconstruction studio. The same screen contains Meta access, approved sources, photo intake, dimensions, processing stages and the final launch button. A local Next.js server handles the provider proxy.
 
 ## Reconstruction path
 
-1. The user discovers sources, excludes mismatched variants, approves the remaining links and adds 3–8 complementary photographs.
+1. The user discovers sources, excludes mismatched variants, approves the remaining links and adds 3-8 complementary photographs.
 2. The local server fetches the approved public HTTPS pages, extracts relevant text, documented dimensions, source images and links to technical files, then sends that evidence snapshot to Muse.
 3. **Muse Spark 1.3** reads the approved context and up to six photos to produce a conservative part inventory and a SAM prompt for each part.
 4. **SAM 3.1** returns pixel masks for those visible parts through the Meta Model API, one accepted part at a time.
-5. **MapAnything Apache (optional)** receives 3–8 views through a local or free-compute worker, registers their cameras and exports a metric scene GLB in parallel.
+5. **MapAnything Apache (optional)** receives 3-8 views through a local or free-compute worker, registers their cameras and exports a metric scene GLB in parallel.
 6. **EIDA local geometry** simplifies the actual mask contours, scales them from the known device envelope, extrudes them and exports GLB assets in the browser.
 7. **EIDA validation** links the metric scene as spatial evidence, assembles the editable parts and reports spatial diagnostics before opening the viewer.
 
-This produces substantially better silhouettes than generic boxes and genuinely uses the hackathon’s hosted Meta models. It is still not photogrammetry or measured CAD: depth, hidden faces and exact placement remain estimated unless the project includes measurements or CAD assets.
+This produces component silhouettes from visible evidence and keeps inferred depth, hidden faces and placement clearly labelled unless the project includes measurements or CAD assets.
 
 ## Quick start
 
@@ -25,7 +25,7 @@ npm install
 cp .env.example .env.local
 ```
 
-Add the hackathon Model API key to `.env.local`:
+Add a Meta Model API key to `.env.local`:
 
 ```text
 MODEL_API_KEY=your_key_here
@@ -43,14 +43,14 @@ For metric multi-view registration, follow the worker setup in [`services/mapany
 
 Do not expose the development server to the public internet. Production-like local use is available with `npm run build && npm start`.
 
-## Cost and hardware boundary
+## Runtime and services
 
-- Muse and SAM calls consume only the Meta Model API credits attached to the hackathon account.
+- Muse and SAM calls use the configured Meta Model API account.
 - Contour processing, GLB generation, assembly validation, storage and rendering run on the local computer.
-- No paid search API, hosted database or cloud storage is required. MapAnything is optional and can run on owned hardware, CPU fallback or a free GPU session.
+- No search API, hosted database or cloud storage is required. MapAnything is optional and runs on a worker you control.
 - Standard Muse is selected by default. The contributor/training-sharing variant is an explicit choice and remains subject to Meta's current terms.
 - The former `services/meta-pipeline` and `services/research-worker` contracts are optional research material; they are not required by this workflow.
-- Without Meta credits or a valid user-provided key, the evidence viewer and synthetic demo remain usable, but live inventory and segmentation cannot run.
+- Without a valid Meta Model API key, the evidence viewer and synthetic demo remain available, but live inventory and segmentation are disabled.
 
 ## What works
 
@@ -70,10 +70,6 @@ Do not expose the development server to the public internet. Production-like loc
 ```bash
 npm run check
 ```
-
-The main application needs a local Next.js server because it proxies the Meta key, fetches approved sources and normalizes Model API responses. It is not the GitHub Pages deployment. GitHub Pages contains a short landing page and a dedicated `/documentation/` route; it never contains live reconstruction routes or a shared API key.
-
-The current GitHub Actions workflow validates the application but does not publish that static showcase yet. A future Pages build must use a separate static entry point and fixture assets, never the live API routes.
 
 ## Current limitations
 

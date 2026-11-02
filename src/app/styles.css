@@ -36,6 +36,11 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+button svg,
+a svg {
+  flex: 0 0 auto;
+}
+
 :focus-visible {
   outline: 2px solid var(--eida-focus);
   outline-offset: 3px;

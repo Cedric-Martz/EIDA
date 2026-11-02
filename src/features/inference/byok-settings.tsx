@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
+import { EidaIcon } from "@/components/ui/eida-icon";
 import { resolvePhotoObservations } from "@/domain/evidence/resolve-photo-observations";
 import type { Project } from "@/domain/evidence/schema";
 import { inferenceRunSchema, type InferenceRun } from "@/domain/inference/run";
@@ -415,7 +416,7 @@ export function ByokSettings({
             />
             <span>
               I agree to send these 3 photos to Meta for this analysis.
-              <small>This may use credits from your Meta account.</small>
+              <small>This sends the request through your Meta account.</small>
             </span>
           </label>
 
@@ -425,7 +426,7 @@ export function ByokSettings({
             onClick={() => void analyzePhotos()}
             disabled={!readyToAnalyze || analyzing}
           >
-            <span aria-hidden="true">✦</span>
+            <EidaIcon name="sparkles" size={18} />
             {analyzing ? "Analyzing photos…" : "Create visual inventory"}
           </button>
           <p className="byok-disclosure">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { EidaIcon } from "@/components/ui/eida-icon";
 import { createLocalId } from "@/shared/create-local-id";
 import {
   hasMatchingImageSignature,
@@ -139,8 +140,8 @@ export function PhotoIntake({
         onClick={() => inputRef.current?.click()}
         disabled={photos.length >= MAX_PHOTOS}
       >
-        <span className="upload-icon" aria-hidden="true">
-          +
+        <span className="upload-icon">
+          <EidaIcon name="gallery" size={22} />
         </span>
         <span>
           <strong>Add views</strong>
@@ -167,14 +168,16 @@ export function PhotoIntake({
                 onClick={() => void removePhoto(photo)}
                 aria-label={`Delete view ${index + 1}`}
               >
-                ×
+                <EidaIcon name="close" size={14} />
               </button>
             </figure>
           ))}
         </div>
       )}
       <p className={photos.length >= 3 ? "requirement is-ok" : "requirement"}>
-        <span>{photos.length >= 3 ? "✓" : "○"}</span>
+        <span>
+          <EidaIcon name={photos.length >= 3 ? "check" : "info"} size={15} />
+        </span>
         {photos.length >= 3
           ? "Enough views are available to prepare an analysis"
           : `${3 - photos.length} more view${3 - photos.length > 1 ? "s" : ""} required`}

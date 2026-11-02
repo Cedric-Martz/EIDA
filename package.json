@@ -16,6 +16,7 @@
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
+    "@getpapillon/papicons": "^0.2.3",
     "@meta-sam/parser": "^0.1.0",
     "@react-three/drei": "^10.7.0",
     "@react-three/fiber": "^9.3.0",

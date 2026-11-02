@@ -8,7 +8,7 @@ One Next.js TypeScript application, local-first browser state, a small server-si
 flowchart TD
 A[Source discovery and user approval] --> B[Local Next.js extraction route]
 B --> C[Evidence snapshot: text dimensions images artifacts]
-D[3–8 local photos] --> E[Explicit per-run consent]
+D[3-8 local photos] --> E[Explicit per-run consent]
 C --> E
 E --> F[Local Next.js Meta proxy]
 F --> G[Muse inventory]
@@ -38,7 +38,7 @@ The versioned project graph and its evidence records, not the model's narrative 
 - `src/server/research/web-evidence.ts` fetches only approved public HTTPS sources, bounds response size, blocks private-network targets and extracts relevant HTML evidence.
 - `src/app/api/meta/inventory` validates Muse's strict inventory response; `src/app/api/meta/segment` decodes SAM's streamed masks with the official parser.
 - `src/features/local-reconstruction` turns accepted masks into profile recipes and evidence links, then hands them to the graph compiler.
-- `services/mapanything-worker` delegates multi-view inference and GLB export to the official Apache MapAnything script. The browser checks health, submits 3–8 photos, polls the job and records its artifacts.
+- `services/mapanything-worker` delegates multi-view inference and GLB export to the official Apache MapAnything script. The browser checks health, submits 3-8 photos, polls the job and records its artifacts.
 - `src/domain/reconstruction-graph` owns the versioned `.eida.json` schema, cross-reference validation and deterministic compilation into an assembly manifest.
 - IndexedDB stores projects and photo blobs locally. Provider keys, raw provider responses and extracted source bodies are not persisted as inference records.
 
@@ -82,7 +82,7 @@ Original photos stay in browser IndexedDB. A BYOK key stays in memory by default
 
 ## Resource limits and non-goals
 
-The implementation intentionally avoids paid infrastructure: no hosted GPU, search API, database, object storage, queue or server-side billing is part of the current path. That means source extraction is bounded, PDF/CAD contents are only indexed, live processing is sequential and local, provider credits are user/hackathon supplied, and there is no public-user isolation or quota enforcement. Full photogrammetry, hidden-surface CAD, material identification and certified repair/recycling guidance are outside the current evidence model.
+The current path has no hosted search service, database, object storage, queue or server-side billing. Source extraction is bounded, PDF/CAD contents are indexed, live processing is sequential and local, and provider access comes from the configured Meta Model API account. Public deployments require their own authentication and user isolation.
 
 ## Error handling
 

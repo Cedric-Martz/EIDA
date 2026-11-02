@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { GlassPanel } from "@/components/ui/glass-panel";
+import { EidaIcon } from "@/components/ui/eida-icon";
 import {
   assemblyManifestSchema,
   diagnoseAssembly,
@@ -794,7 +795,7 @@ export function ViewerPanel({
               }
               onClick={() => setDiagnosticsOpen((value) => !value)}
             >
-              <span aria-hidden="true">!</span>
+              <EidaIcon name="alert" size={16} />
               <small>{assemblyDiagnostics.length} issues</small>
             </button>
           )}
@@ -804,7 +805,7 @@ export function ViewerPanel({
             onClick={arrangeOnWorkbench}
             disabled={project.components.length === 0}
           >
-            <span aria-hidden="true">▦</span>
+            <EidaIcon name="grid" size={17} />
             <small>Arrange</small>
           </button>
           <button
@@ -813,7 +814,7 @@ export function ViewerPanel({
             onClick={showExplodedView}
             disabled={project.components.length === 0}
           >
-            <span aria-hidden="true">↕</span>
+            <EidaIcon name="gallery" size={17} />
             <small>Explode</small>
           </button>
           <button
@@ -822,7 +823,7 @@ export function ViewerPanel({
             onClick={rebuildDevice}
             disabled={project.components.length === 0}
           >
-            <span aria-hidden="true">↺</span>
+            <EidaIcon name="gears" size={17} />
             <small>Rebuild</small>
           </button>
           <button
@@ -830,7 +831,7 @@ export function ViewerPanel({
             onClick={() => setResetKey((value) => value + 1)}
             disabled={project.components.length === 0}
           >
-            <span aria-hidden="true">⌖</span>
+            <EidaIcon name="search" size={17} />
             <small>Fit</small>
           </button>
         </div>
@@ -852,7 +853,7 @@ export function ViewerPanel({
               onClick={() => setDiagnosticsOpen(false)}
               aria-label="Close diagnostics"
             >
-              ×
+              <EidaIcon name="close" size={15} />
             </button>
           </div>
           <p className="diagnostics-intro">
@@ -919,7 +920,10 @@ export function ViewerPanel({
                       <small>{item.category}</small>
                     </span>
                     <span className={`part-state part-state--${itemStatus}`}>
-                      {itemStatus === "unknown" ? "◇" : "●"}
+                      <EidaIcon
+                        name={itemStatus === "unknown" ? "link" : "check"}
+                        size={13}
+                      />
                       <span className="visually-hidden">{itemStatus}</span>
                     </span>
                   </button>
@@ -953,7 +957,8 @@ export function ViewerPanel({
               className="project-guide-edit"
               onClick={() => setWorkflowOpen(true)}
             >
-              Open Meta reconstruction →
+              Open Meta reconstruction
+              <EidaIcon name="arrow-right" size={16} />
             </button>
           </GlassPanel>
         )}
@@ -976,7 +981,7 @@ export function ViewerPanel({
               onClick={() => setInspectorOpen(false)}
               aria-label="Close inspector"
             >
-              ×
+              <EidaIcon name="close" size={15} />
             </button>
           </div>
 
@@ -1166,7 +1171,9 @@ export function ViewerPanel({
                         {graphRelations.map((relation) => (
                           <li key={relation.id}>
                             <strong>{relation.kind}</strong>
-                            {relation.sourcePartId} → {relation.targetPartId}
+                            {relation.sourcePartId}
+                            <EidaIcon name="arrow-right" size={13} />
+                            {relation.targetPartId}
                           </li>
                         ))}
                       </ul>
@@ -1339,7 +1346,7 @@ export function ViewerPanel({
               onClick={() => setAnalysisOpen(false)}
               aria-label="Close"
             >
-              ×
+              <EidaIcon name="close" size={15} />
             </button>
           </div>
           <ul>

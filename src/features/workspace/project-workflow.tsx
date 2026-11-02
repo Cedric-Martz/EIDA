@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { EidaIcon } from "@/components/ui/eida-icon";
 import {
   diagnoseAssembly,
   type AssemblyDiagnostic,
@@ -611,7 +612,7 @@ export function ProjectWorkflow({
             <p>Local Meta reconstruction studio</p>
             <h1 id={titleId}>Configure and run everything here</h1>
             <span>
-              Muse and SAM run on your Meta credits. EIDA writes a validated
+              Muse and SAM process the selected inputs. EIDA writes a validated
               reconstruction graph, then compiles the geometry locally.
             </span>
           </div>
@@ -628,7 +629,7 @@ export function ProjectWorkflow({
               disabled={running}
               aria-label="Close workflow"
             >
-              ×
+              <EidaIcon name="close" size={16} />
             </button>
           </div>
         </header>
@@ -645,7 +646,8 @@ export function ProjectWorkflow({
                 <i data-ready={connected}>{connected ? "Ready" : "Required"}</i>
               </div>
               <p className={styles.helpText}>
-                Paste the hackathon key for this session, or leave it empty when
+                Paste a Meta Model API key for this session, or leave it empty
+                when
                 <code> MODEL_API_KEY </code> exists in <code>.env.local</code>.
               </p>
               <label className={styles.fullField}>
@@ -796,8 +798,7 @@ export function ProjectWorkflow({
                 <span>
                   Add metric multi-view registration
                   <small>
-                    Uses the Apache Meta checkpoint on your own local or free
-                    GPU worker. It does not consume Model API credits.
+                    Uses the Apache Meta checkpoint on a worker you control.
                   </small>
                 </span>
               </label>
@@ -858,7 +859,7 @@ export function ProjectWorkflow({
                 </p>
               </div>
               <span className={styles.costBadge}>
-                Meta credits · optional free worker
+                Local graph · optional worker
               </span>
             </div>
 
@@ -1002,7 +1003,7 @@ export function ProjectWorkflow({
                             <path d={mask.svgPath} />
                           </svg>
                         ) : (
-                          <span aria-hidden="true">○</span>
+                          <EidaIcon name="info" size={18} />
                         )}
                         <p>
                           <strong>{item.label}</strong>
@@ -1123,7 +1124,7 @@ export function ProjectWorkflow({
                     <small>{manifest.parts.length} compiled graph parts</small>
                     Open reconstructed assembly
                   </span>
-                  <b aria-hidden="true">→</b>
+                  <EidaIcon name="arrow-right" size={20} />
                 </button>
               ) : (
                 <button
@@ -1141,7 +1142,7 @@ export function ProjectWorkflow({
                       ? "Reconstruction in progress…"
                       : "Start reconstruction"}
                   </span>
-                  <b aria-hidden="true">→</b>
+                  <EidaIcon name="arrow-right" size={20} />
                 </button>
               )}
               {running && (
