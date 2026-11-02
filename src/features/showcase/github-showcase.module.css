@@ -15,6 +15,9 @@
 .page * {
   box-sizing: border-box;
 }
+.page svg {
+  flex: 0 0 auto;
+}
 .header {
   position: sticky;
   z-index: 20;
@@ -107,7 +110,7 @@
 .kicker {
   margin: 0;
   color: var(--orange);
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-family: inherit;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -160,9 +163,7 @@
   justify-items: center;
   gap: 14px;
   color: var(--muted);
-  font:
-    800 10px/1 ui-monospace,
-    monospace;
+  font: 800 10px/1 inherit;
   letter-spacing: 0.13em;
 }
 .heroSignal i {
@@ -180,9 +181,7 @@
 .promise span {
   padding: 9px;
   color: var(--muted);
-  font:
-    750 10px/1 ui-monospace,
-    monospace;
+  font: 750 10px/1 inherit;
   letter-spacing: 0.08em;
   text-align: center;
   text-transform: uppercase;

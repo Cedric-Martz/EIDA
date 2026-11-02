@@ -45,7 +45,3 @@ Create one project manually, fields: Status, Priority, Milestone, Area, Estimate
 ## Smartphone testing
 
 For Galaxy A32 5G, connect to an HTTPS dev origin trusted by the phone. A plain LAN HTTP URL may not allow camera capture. Never expose the local server publicly: it has no user accounts, durable quota enforcement or multi-user isolation.
-
-## GitHub Pages
-
-GitHub Pages is suitable for a separate static documentation and synthetic 3D demo build. It cannot safely run the live workflow because Pages cannot protect `MODEL_API_KEY` or host the server routes used for source extraction, Muse and SAM. The current workflow validates the repository; publishing the static showcase requires a dedicated static entry point and fixture assets.

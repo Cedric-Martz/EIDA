@@ -2,7 +2,7 @@ Priority,Milestone,Area,Title,Acceptance Criteria,Estimate Hours
 P0,M0,Foundation,"Bootstrap Next.js, TypeScript, ESLint and Prettier",`npm run check` passes on clean install,2
 P0,M0,Foundation,Commit npm lockfile and CI,"CI runs npm ci, format, lint, types, tests, build",2
 P0,M0,Security,"Document secrets, local access and privacy",No keys committed; SECURITY.md reviewed,2
-P0,M1,Capture,Capture 3–8 photos on Galaxy A32 5G,Camera and file fallback tested on phone; image metadata saved,5
+P0,M1,Capture,Capture 3-8 photos on Galaxy A32 5G,Camera and file fallback tested on phone; image metadata saved,5
 P0,M1,Storage,Persist projects and photos with IndexedDB,Reload restores project; deletion works,4
 P0,M1,Meta,Validate Muse Spark API entitlement and multimodal request,Real consented image smoke test; response schema validated,5
 P0,M2,Documents,Import PDF and selected technical sources,Page-level references retained; size/type limits,6

@@ -2,11 +2,11 @@
 
 ## Goal
 
-From multiple photographs and selected technical documents, create an interactive, component-based 3D exploded view of an electronic device with auditable evidence and visible uncertainty. Evidences aims to be pictures you made, or from a web search from the AI from user's given informations.
+From multiple photographs and selected technical documents, create an interactive, component-based 3D exploded view of an electronic device with auditable evidence. Sources can include user photographs and reviewed public material found from the device information provided.
 
 ## Current usable slice
 
-The local interface opens on a presentation page, then starts a real evidence project instead of silently loading synthetic parts. The user discovers and reviews public repair sources, excludes mismatched variants, confirms a known manufacturer/model or leaves the identity unknown, and adds 3–8 browser-stored photos. The launch first extracts the approved web pages, dimensions, images and technical-file links; it then gives that snapshot plus up to six photos to Muse and sends one accepted part at a time to SAM 3.1. EIDA writes the accepted results into a validated `.eida.json` reconstruction graph before compiling any GLB geometry. A confirmed identity is context, never automatic proof of a component.
+The local interface opens on a presentation page, then starts a real evidence project instead of silently loading synthetic parts. The user discovers and reviews public repair sources, excludes mismatched variants, confirms a known manufacturer/model or leaves the identity unknown, and adds 3-8 browser-stored photos. The launch first extracts the approved web pages, dimensions, images and technical-file links; it then gives that snapshot plus up to six photos to Muse and sends one accepted part at a time to SAM 3.1. EIDA writes the accepted results into a validated `.eida.json` reconstruction graph before compiling any GLB geometry. A confirmed identity is context, never automatic proof of a component.
 
 After a BYOK connection test and explicit per-run consent, the approved source snapshot and up to six photos can be processed through the local Meta proxy. Muse inventory and SAM masks are validated before the reconstruction graph is generated. Each graph part preserves its profile recipe, pose, fidelity, property-level evidence and explicit assumptions. The graph is persisted locally, can be downloaded, and is deterministically compiled into the assembly consumed by the viewer.
 
@@ -22,7 +22,7 @@ Samsung Galaxy Tab 4 SM-T530. This is a **reference model**, not a claim that al
 
 ## MVP acceptance scenario
 
-1. Capture 3–8 images on Galaxy A32 5G.
+1. Capture 3-8 images on Galaxy A32 5G.
 2. Confirm model identity or leave it unknown.
 3. Discover, review and approve public repair sources.
 4. Extract their readable text, dimensions, images and technical-file links.
@@ -33,9 +33,9 @@ Samsung Galaxy Tab 4 SM-T530. This is a **reference model**, not a claim that al
 9. Show evidence, source links, dimensions and assumptions for each component.
 10. Keep unsupported depth, hidden geometry and materials explicitly estimated/unknown.
 
-## Material and service constraints
+## Runtime and services
 
-The project is intentionally built without paid infrastructure. It does not pay for a search provider, hosted GPU, photogrammetry service, CAD conversion service, database, object storage, queue or production monitoring. Live Muse/SAM usage depends on credits and access supplied by the user or hackathon account. The local machine performs extraction orchestration, contour processing, GLB generation, validation, storage and rendering.
+The local machine performs extraction orchestration, contour processing, GLB generation, validation, storage and rendering. Muse and SAM use the configured Meta Model API account, while MapAnything runs on a separate worker controlled by the operator.
 
 ## Current limitations
 

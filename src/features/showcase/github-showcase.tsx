@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { EidaIcon } from "@/components/ui/eida-icon";
 import { demoAssemblyManifest } from "@/domain/reconstruction/demo-assembly";
 import { demoProject } from "@/domain/reconstruction/demo-project";
 import type { SceneMode } from "@/features/viewer/device-viewer";
@@ -22,20 +23,20 @@ const chapters = [
   {
     index: "01",
     label: "Observe",
-    title: "Les photos deviennent des vues reliées.",
-    body: "SAM 3.1 isole les composants. MapAnything aligne jusqu’à huit vues et restitue une référence spatiale métrique.",
+    title: "Photos become connected views.",
+    body: "SAM isolates components. MapAnything aligns up to eight views in a shared metric frame.",
   },
   {
     index: "02",
     label: "Structure",
-    title: "Les modèles proposent, EIDA organise.",
-    body: "Muse transforme les sources approuvées en inventaire. Chaque contour, dimension et relation rejoint un graphe EIDA éditable.",
+    title: "Sources become a structured assembly.",
+    body: "Muse turns approved sources into a parts inventory. Each outline, dimension, and relationship enters an editable EIDA graph.",
   },
   {
     index: "03",
     label: "Inspect",
-    title: "L’assemblage reste traçable.",
-    body: "Le compilateur produit les pièces GLB, vérifie leur placement et conserve les preuves qui ont construit la scène.",
+    title: "Every part stays traceable.",
+    body: "The compiler creates GLB parts, checks their placement, and keeps the evidence used to build the scene.",
   },
 ] as const;
 
@@ -100,10 +101,6 @@ function ScrollReconstruction() {
             onSelect={() => undefined}
             onReady={() => undefined}
           />
-          <div className={styles.canvasHud}>
-            <span>SCROLL-DRIVEN / NO CONTROLS</span>
-            <span>{mode.toUpperCase()}</span>
-          </div>
         </div>
         <div className={styles.storyCopy}>
           <span className={styles.kicker}>
@@ -129,18 +126,18 @@ export function GithubShowcase() {
   return (
     <main className={styles.page} id="top">
       <header className={styles.header}>
-        <a className={styles.logo} href="#top" aria-label="EIDA accueil">
+        <a className={styles.logo} href="#top" aria-label="EIDA home">
           <Image src={iconPath} alt="" width={34} height={34} priority />
           <span>EIDA</span>
         </a>
-        <nav aria-label="Navigation principale">
-          <a href="#process">Fonctionnement</a>
+        <nav aria-label="Main navigation">
+          <a href="#process">How it works</a>
           <a href="./documentation/">Documentation</a>
           <a
             className={styles.repoLink}
             href="https://github.com/Cedric-Martz/EIDA"
           >
-            GitHub ↗
+            GitHub <EidaIcon name="external" size={14} />
           </a>
         </nav>
       </header>
@@ -150,20 +147,20 @@ export function GithubShowcase() {
         <div className={styles.heroCopy}>
           <p className={styles.kicker}>Evidence-based 3D reconstruction</p>
           <h1>
-            Des photos.
+            From photos.
             <br />
-            Une structure <em>inspectable.</em>
+            To an <em>inspectable assembly.</em>
           </h1>
           <p className={styles.lede}>
-            EIDA combine les modèles Meta avec un graphe 3D ouvert pour passer
-            de vues utilisateur à un assemblage électronique documenté.
+            EIDA combines Meta models with an open 3D graph to turn device
+            photos into a documented electronic assembly.
           </p>
           <div className={styles.actions}>
             <a className={styles.primary} href="./documentation/">
-              Installer EIDA <span>→</span>
+              Install EIDA <EidaIcon name="arrow-right" size={16} />
             </a>
             <a className={styles.secondary} href="#process">
-              Voir le pipeline ↓
+              See the workflow <EidaIcon name="arrow-down" size={15} />
             </a>
           </div>
         </div>
@@ -179,7 +176,7 @@ export function GithubShowcase() {
       </section>
 
       <section className={styles.promise} aria-label="Pipeline EIDA">
-        <span>SAM 3.1</span>
+        <span>SAM</span>
         <span>MapAnything</span>
         <span>Muse Spark</span>
         <span>.eida.json</span>
@@ -188,18 +185,12 @@ export function GithubShowcase() {
       <ScrollReconstruction />
 
       <section className={styles.architecture}>
-        <div>
-          <p className={styles.kicker}>Deux moteurs, un seul parcours</p>
-          <h2>
-            Les crédits Meta pour comprendre. Le worker libre pour mesurer.
-          </h2>
-        </div>
         <ol>
           <li>
             <span>01</span>
             <div>
               <strong>Meta Model API</strong>
-              <p>Muse organise les preuves et SAM 3.1 extrait les pièces.</p>
+              <p>Muse structures the evidence and SAM extracts each part.</p>
             </div>
           </li>
           <li>
@@ -207,7 +198,7 @@ export function GithubShowcase() {
             <div>
               <strong>MapAnything Apache</strong>
               <p>
-                Un worker local ou GPU gratuit aligne les vues en parallèle.
+                A local worker aligns the views in a shared coordinate system.
               </p>
             </div>
           </li>
@@ -216,7 +207,7 @@ export function GithubShowcase() {
             <div>
               <strong>EIDA Graph</strong>
               <p>
-                Les résultats deviennent des recettes 3D éditables et reliées.
+                Results become editable, connected 3D reconstruction recipes.
               </p>
             </div>
           </li>
@@ -225,14 +216,18 @@ export function GithubShowcase() {
 
       <section className={styles.finalCta}>
         <Image src={iconPath} alt="" width={72} height={72} />
-        <p className={styles.kicker}>Prêt à reconstruire ?</p>
-        <h2>Le guide complet tient sur une page.</h2>
-        <a href="./documentation/">Ouvrir la documentation →</a>
+        <p className={styles.kicker}>Ready to reconstruct?</p>
+        <h2>The complete setup guide fits on one page.</h2>
+        <a href="./documentation/">
+          Open the documentation <EidaIcon name="arrow-right" size={17} />
+        </a>
       </section>
 
       <footer className={styles.footer}>
         <span>EIDA · Open source</span>
-        <a href="#top">Retour en haut ↑</a>
+        <a href="#top">
+          Back to top <EidaIcon name="arrow-up" size={14} />
+        </a>
       </footer>
     </main>
   );

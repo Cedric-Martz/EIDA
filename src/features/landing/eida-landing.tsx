@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { EidaIcon } from "@/components/ui/eida-icon";
 import styles from "./eida-landing.module.css";
 
 const storySteps = [
@@ -187,14 +188,14 @@ export function EidaLanding({
                   <small>Live workbench</small>
                   Open the 3D workbench
                 </span>
-                <b aria-hidden="true">↗</b>
+                <EidaIcon name="external" size={20} />
               </button>
               <a className={styles.secondaryCta} href="#guide">
-                Read the quick guide <span aria-hidden="true">↓</span>
+                Read the quick guide <EidaIcon name="arrow-down" size={16} />
               </a>
             </div>
             <p className={styles.demoNote} id="demo-disclaimer">
-              <span aria-hidden="true">●</span>
+              <EidaIcon name="info" size={15} />
               The live studio runs locally. Meta hosts Muse and SAM; your
               computer creates and displays the GLB geometry.
             </p>
@@ -214,7 +215,7 @@ export function EidaLanding({
           </div>
 
           <a className={styles.scrollCue} href="#method">
-            <span aria-hidden="true">↓</span>
+            <EidaIcon name="arrow-down" size={16} />
             Scroll to follow the evidence
           </a>
         </section>
@@ -279,7 +280,7 @@ export function EidaLanding({
                   <h3>{step.title}</h3>
                   <p className={styles.cardBody}>{step.body}</p>
                   <p className={styles.cardDetail}>
-                    <span aria-hidden="true">↳</span> {step.detail}
+                    <EidaIcon name="arrow-right" size={15} /> {step.detail}
                   </p>
                 </article>
               ))}
@@ -328,7 +329,7 @@ export function EidaLanding({
               <small>Live workbench</small>
               Open the EIDA workbench
             </span>
-            <b aria-hidden="true">↗</b>
+            <EidaIcon name="external" size={20} />
           </button>
           <p>
             No account required · Local browser project · Synthetic demo clearly
@@ -345,7 +346,9 @@ export function EidaLanding({
           <span className={styles.brandName}>EIDA</span>
         </a>
         <p>Evidence-based Intelligence for Disassembly &amp; Analysis</p>
-        <a href="#top">Back to top ↑</a>
+        <a href="#top">
+          Back to top <EidaIcon name="arrow-up" size={14} />
+        </a>
       </footer>
     </main>
   );

@@ -12,6 +12,7 @@ import {
   type DeviceCatalogEntry,
 } from "@/domain/device/catalog";
 import type { Project } from "@/domain/evidence/schema";
+import { EidaIcon } from "@/components/ui/eida-icon";
 
 type Device = Project["device"];
 
@@ -119,7 +120,7 @@ export function DeviceSetup({
               onClick={onClose}
               aria-label="Close project setup"
             >
-              ×
+              <EidaIcon name="close" size={16} />
             </button>
           )}
         </header>
@@ -138,14 +139,16 @@ export function DeviceSetup({
               onClick={() => setMode("known")}
             >
               <span className="project-start-option__icon" aria-hidden="true">
-                Aa
+                <EidaIcon name="search" size={24} />
               </span>
               <strong>I know the device</strong>
               <small>
                 Enter a manufacturer and model, then review repair guides and
                 technical sources before any part is proposed.
               </small>
-              <b>Enter identity →</b>
+              <b>
+                Enter identity <EidaIcon name="arrow-right" size={15} />
+              </b>
             </button>
             <button
               type="button"
@@ -153,7 +156,7 @@ export function DeviceSetup({
               onClick={onUnknownDevice}
             >
               <span className="project-start-option__icon" aria-hidden="true">
-                ◎
+                <EidaIcon name="camera" size={24} />
               </span>
               <strong>I do not know</strong>
               <small>
@@ -162,8 +165,9 @@ export function DeviceSetup({
               </small>
               <b>
                 {photoCount > 0
-                  ? `Continue with ${photoCount} photo${photoCount > 1 ? "s" : ""} →`
-                  : "Start with photos →"}
+                  ? `Continue with ${photoCount} photo${photoCount > 1 ? "s" : ""}`
+                  : "Start with photos"}
+                <EidaIcon name="arrow-right" size={15} />
               </b>
             </button>
           </div>
@@ -174,7 +178,7 @@ export function DeviceSetup({
               className="project-setup-back"
               onClick={() => setMode("choose")}
             >
-              ← Back to choices
+              <EidaIcon name="arrow-left" size={15} /> Back to choices
             </button>
             <div
               className="device-search"
@@ -187,7 +191,7 @@ export function DeviceSetup({
               <label htmlFor={searchId}>
                 <span>Search for an object *</span>
                 <div className="device-search-input">
-                  <span aria-hidden="true">⌕</span>
+                  <EidaIcon name="search" size={17} />
                   <input
                     id={searchId}
                     name="device-search"
@@ -224,7 +228,7 @@ export function DeviceSetup({
                       }}
                       aria-label="Clear device search"
                     >
-                      ×
+                      <EidaIcon name="close" size={14} />
                     </button>
                   )}
                 </div>
@@ -280,7 +284,7 @@ export function DeviceSetup({
             </div>
             {identity && (
               <div className="device-selected-identity">
-                <span aria-hidden="true">✓</span>
+                <EidaIcon name="check" size={17} />
                 <div>
                   <strong>{identity.model}</strong>
                   <small>

@@ -24,6 +24,10 @@
   box-sizing: border-box;
 }
 
+.page svg {
+  flex: 0 0 auto;
+}
+
 .page button,
 .page a {
   -webkit-tap-highlight-color: transparent;

@@ -1,13 +1,15 @@
+import { EidaIcon } from "@/components/ui/eida-icon";
+
 type Tool = "parts" | "inspect" | "evidence" | "quality" | "grid" | "reset";
 
-const tools: { id: Tool; symbol: string; label: string }[] = [
-  { id: "parts", symbol: "▤", label: "Parts" },
-  { id: "inspect", symbol: "⌖", label: "Inspect" },
-  { id: "evidence", symbol: "◇", label: "Evidence" },
-  { id: "grid", symbol: "⌗", label: "Grid" },
-  { id: "quality", symbol: "◒", label: "Quality" },
-  { id: "reset", symbol: "↺", label: "Reset" },
-];
+const tools = [
+  { id: "parts", icon: "list", label: "Parts" },
+  { id: "inspect", icon: "search", label: "Inspect" },
+  { id: "evidence", icon: "link", label: "Evidence" },
+  { id: "grid", icon: "grid", label: "Grid" },
+  { id: "quality", icon: "palette", label: "Quality" },
+  { id: "reset", icon: "gears", label: "Reset" },
+] as const;
 
 export function ViewerToolbar({
   activeTools,
@@ -28,7 +30,7 @@ export function ViewerToolbar({
           }
           onClick={() => onAction(tool.id)}
         >
-          <span aria-hidden="true">{tool.symbol}</span>
+          <EidaIcon name={tool.icon} size={18} />
           <small>{tool.label}</small>
         </button>
       ))}

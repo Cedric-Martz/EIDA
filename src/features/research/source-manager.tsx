@@ -9,6 +9,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { EidaIcon } from "@/components/ui/eida-icon";
 import {
   addSource,
   canonicalizeSourceUrl,
@@ -183,7 +184,7 @@ function SourceCard({
             <span
               className={`${styles.stateBadge} ${approved ? styles.stateApproved : styles.stateDiscovered}`}
             >
-              <span aria-hidden="true">{approved ? "✓" : "○"}</span>
+              <EidaIcon name={approved ? "check" : "info"} size={13} />
               {approved ? "Approved" : "Discovered"}
             </span>
             <span className={styles.sourceProvider}>
@@ -194,8 +195,8 @@ function SourceCard({
           <h4>
             <a href={source.url} target="_blank" rel="noopener noreferrer">
               {source.title}
-              <span className={styles.externalMark} aria-hidden="true">
-                ↗
+              <span className={styles.externalMark}>
+                <EidaIcon name="external" size={13} />
               </span>
             </a>
           </h4>
@@ -635,7 +636,7 @@ export function SourceManager({
             onClick={onClose}
             aria-label="Close source manager"
           >
-            <span aria-hidden="true">×</span>
+            <EidaIcon name="close" size={16} />
           </button>
         </header>
 
@@ -652,7 +653,7 @@ export function SourceManager({
                 <small>
                   {resolvedEndpoint
                     ? "The endpoint searches iFixit plus targeted manuals, FCC records, GitHub hardware and CAD libraries. No secret is stored in this page."
-                    : "GitHub Pages calls iFixit’s public API directly. General web search becomes available when a research endpoint is configured."}
+                    : "GitHub Pages calls iFixit's public API directly. General web search becomes available when a research endpoint is configured."}
                 </small>
               </div>
             </div>
@@ -794,7 +795,7 @@ export function SourceManager({
               </ul>
             ) : (
               <div className={styles.emptyState}>
-                <span aria-hidden="true">✓</span>
+                <EidaIcon name="check" size={18} />
                 <p>
                   No approved source yet. Review the discovered results below
                   and approve only those you want to use.
@@ -834,7 +835,7 @@ export function SourceManager({
               </ul>
             ) : (
               <div className={styles.emptyState}>
-                <span aria-hidden="true">⌕</span>
+                <EidaIcon name="search" size={18} />
                 <p>
                   Search the exact device model or add a public source manually.
                 </p>
@@ -860,7 +861,7 @@ export function SourceManager({
             disabled={approvedSources.length === 0 || preparing}
           >
             {preparing ? "Preparing…" : "Prepare reconstruction"}
-            {!preparing && <span aria-hidden="true">→</span>}
+            {!preparing && <EidaIcon name="arrow-right" size={16} />}
           </button>
           {prepareError && (
             <p className={styles.prepareError} role="alert">

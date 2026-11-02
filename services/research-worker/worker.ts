@@ -261,7 +261,7 @@ async function research(request: Request, env: WorkerEnv) {
   const query = normalizedQuery(body.query);
   if (!query) {
     return json(
-      { error: { code: "INVALID_QUERY", message: "Use 2–160 characters." } },
+      { error: { code: "INVALID_QUERY", message: "Use 2-160 characters." } },
       400,
     );
   }

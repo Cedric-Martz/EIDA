@@ -4,7 +4,7 @@ import { EidaDocumentation } from "@/features/documentation/eida-documentation";
 export const metadata: Metadata = {
   title: "Documentation · EIDA",
   description:
-    "Installer EIDA, connecter Meta Model API et activer le worker MapAnything.",
+    "Install EIDA, connect the Meta Model API, and enable the MapAnything worker.",
 };
 
 export default function DocumentationPage() {

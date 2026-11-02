@@ -39,13 +39,12 @@ Each transfer requires explicit consent. The key and raw provider response are
 not stored. Generated geometry retains an `estimated` fidelity label because an
 image contour cannot establish hidden surfaces, depth or metrological scale.
 
-## Limitations and cost boundary
+## Runtime boundary
 
-No paid search API, database or object storage is required. Muse/SAM depend on
-user credits and provider availability. Optional MapAnything compute comes from
-the user's machine or a separately supplied free GPU session; its cost is never
-charged to Meta Model API credits. Contour processing, graph compilation and
-rendering remain local.
+No search API, database or object storage is required. Muse and SAM use the
+configured Meta Model API account. Optional MapAnything processing runs on a
+separate worker controlled by the operator. Contour processing, graph
+compilation and rendering remain local.
 
 MapAnything now provides optional multi-view registration and a scene-level
 metric reference. Per-component mesh fitting, textured hidden surfaces, PDF
