@@ -257,7 +257,7 @@ export function buildEstimatedAssembly(
   return validateAssemblyManifest({
     schemaVersion: 1,
     id: `estimated-${safeFragment(input.projectId)}-${input.createdAt ?? Date.now()}`,
-    label: `${input.deviceLabel} · evidence-limited estimate`,
+    label: `${input.deviceLabel} - evidence-limited estimate`,
     units: "mm",
     assemblyBoundsMm: {
       minMm: [-length / 2, -width / 2, -thickness / 2],

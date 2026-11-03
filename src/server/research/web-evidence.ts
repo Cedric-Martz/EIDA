@@ -13,6 +13,7 @@ import { analyzeCadArtifact } from "./cad-evidence";
 
 const MAX_PAGE_BYTES = 2_500_000;
 const MAX_CAD_BYTES = 12_000_000;
+const MAX_IMAGE_BYTES = 12_000_000;
 const MAX_CAD_FILES_PER_SOURCE = 3;
 const MAX_REDIRECTS = 3;
 const RELEVANT_TERMS =
@@ -134,6 +135,31 @@ async function fetchPublicSource(
   throw new Error("Source redirect failed.");
 }
 
+export async function fetchPublicEvidenceImage(value: string): Promise<{
+  body: Buffer;
+  mediaType: string;
+  url: string;
+}> {
+  const fetched = await fetchPublicSource(value, {
+    maxBytes: MAX_IMAGE_BYTES,
+    accept: "image/jpeg,image/png,image/webp,image/gif;q=0.9",
+  });
+  const mediaType =
+    fetched.response.headers
+      .get("content-type")
+      ?.split(";")[0]
+      ?.trim()
+      .toLowerCase() ?? "";
+  if (
+    !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mediaType)
+  ) {
+    throw new Error(
+      `Unsupported source image type: ${mediaType || "unknown"}.`,
+    );
+  }
+  return { body: fetched.body, mediaType, url: fetched.url.toString() };
+}
+
 function resolvePublicHttpUrl(raw: string, base: URL): string | null {
   try {
     const url = new URL(raw, base);
@@ -246,7 +272,7 @@ function cadDimension(
   return {
     sourceId: source.id,
     sourceUrl: source.url,
-    label: `CAD bounds · ${artifact.label}`.slice(0, 200),
+    label: `CAD bounds - ${artifact.label}`.slice(0, 200),
     valuesMm: dimensions,
     raw: `${analysis.format.toUpperCase()} ${analysis.unit} bounds from ${analysis.pointCount} coordinate${analysis.pointCount === 1 ? "" : "s"}`,
     confidence: analysis.confidence,

@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { localPartInventorySchema } from "@/domain/local-reconstruction";
 import {
+  ALLOWED_INVENTORY_MODELS,
+  MAX_INVENTORY_PARTS,
+  MAX_SOURCE_IMAGES,
+  MAX_USER_PHOTOS,
+  MAX_VISUAL_INPUTS,
+  META_MODELS,
+  MIN_USER_PHOTOS,
+} from "@/config/meta-models";
+import { z } from "zod";
+import {
   META_MODEL_API_BASE_URL,
   fileToDataUrl,
   metaApiKey,
@@ -11,7 +21,19 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const allowedModels = new Set(["muse-spark-1.3", "muse-spark-1.3-contributor"]);
+const sourceImagesSchema = z
+  .array(
+    z.object({
+      sourceId: z.string().trim().min(1).max(200),
+      url: z
+        .string()
+        .url()
+        .max(4_096)
+        .refine((value) => value.startsWith("https://")),
+      alt: z.string().trim().max(500),
+    }),
+  )
+  .max(MAX_SOURCE_IMAGES);
 
 export async function POST(request: NextRequest) {
   const key = metaApiKey(request);
@@ -25,27 +47,71 @@ export async function POST(request: NextRequest) {
   const photos = form
     .getAll("photos")
     .filter((value): value is File => value instanceof File)
-    .slice(0, 6);
-  if (photos.length < 3) {
+    .slice(0, MAX_USER_PHOTOS);
+  if (photos.length < MIN_USER_PHOTOS) {
     return NextResponse.json(
-      { error: "Three photos are required for the inventory." },
+      {
+        error: `${MIN_USER_PHOTOS} photos are required for the inventory.`,
+      },
       { status: 400 },
     );
   }
   const modelValue = form.get("model");
   const model =
-    typeof modelValue === "string" && allowedModels.has(modelValue)
+    typeof modelValue === "string" && ALLOWED_INVENTORY_MODELS.has(modelValue)
       ? modelValue
-      : "muse-spark-1.3";
+      : META_MODELS.inventory;
   const contextValue = form.get("context");
   const context =
-    typeof contextValue === "string" ? contextValue.slice(0, 50_000) : "{}";
-  const imageParts = await Promise.all(
-    photos.map(async (photo) => ({
-      type: "image_url",
-      image_url: { url: await fileToDataUrl(photo), detail: "high" },
-    })),
+    typeof contextValue === "string" ? contextValue.slice(0, 200_000) : "{}";
+  const sourceImagesValue = form.get("sourceImages");
+  let sourceImages: z.infer<typeof sourceImagesSchema> = [];
+  if (typeof sourceImagesValue === "string" && sourceImagesValue) {
+    try {
+      const parsed = sourceImagesSchema.safeParse(
+        JSON.parse(sourceImagesValue),
+      );
+      if (parsed.success) sourceImages = parsed.data;
+    } catch {
+      sourceImages = [];
+    }
+  }
+  sourceImages = sourceImages.slice(
+    0,
+    Math.min(MAX_SOURCE_IMAGES, MAX_VISUAL_INPUTS - photos.length),
   );
+  const localImageParts = await Promise.all(
+    photos
+      .flatMap((photo, index) => [
+        {
+          type: "text" as const,
+          text: `Visual ${index + 1}: user photo ${photo.name}. This visual may be selected for SAM.`,
+        },
+        {
+          type: "image_url" as const,
+          image_url: { url: "" as string, detail: "high" as const },
+        },
+      ])
+      .map(async (part, index) => {
+        if (part.type === "text") return part;
+        const photo = photos[Math.floor(index / 2)]!;
+        return {
+          ...part,
+          image_url: { ...part.image_url, url: await fileToDataUrl(photo) },
+        };
+      }),
+  );
+  const sourceImageParts = sourceImages.flatMap((image, index) => [
+    {
+      type: "text" as const,
+      text: `Visual ${photos.length + index + 1}: public source image from source ${image.sourceId}${image.alt ? `; caption: ${image.alt}` : ""}.`,
+    },
+    {
+      type: "image_url" as const,
+      image_url: { url: image.url, detail: "auto" as const },
+    },
+  ]);
+  const visualCount = photos.length + sourceImages.length;
 
   const response = await fetch(`${META_MODEL_API_BASE_URL}/chat/completions`, {
     method: "POST",
@@ -57,17 +123,17 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: "developer",
-          content:
-            "You prepare device parts for SAM 3.1 segmentation and evidence-grounded 3D reconstruction. Treat webEvidence excerpts, dimensions and technical artifacts as cited evidence, not as suggestions. Return only parts documented by those sources or visibly separable in the supplied photos. Never invent hidden internals. Use a short concrete noun phrase for samPrompt, not an instruction. Pick photoIndex 1 through 6 where the complete outline is most visible. IDs must be unique lowercase kebab-case. Give dimensionsMm as [long side, short side, thickness] only when an explicit measurement or parsed CAD bound with confidence >= 0.75 clearly belongs to that exact component; otherwise null. Copy the supporting sourceId values into dimensionSourceIds, and leave that array empty when dimensionsMm is null. Give thicknessMm only when documented or present in dimensionsMm; otherwise null. Limit the list to the 10 most useful parts.",
+          content: `You prepare the most complete evidence-grounded device part set possible for ${META_MODELS.segmentation} segmentation and 3D reconstruction. Treat source excerpts, dimensions, CAD metadata, and every supplied visual as evidence. Include every physically distinct component that is clearly visible in at least one visual or explicitly documented for this exact device variant; do not invent generic hidden internals. Prefer useful subassemblies over screws, adhesives, printed marks, or cosmetic details. Use a short concrete noun phrase for samPrompt. Set imageIndex to the 1-based visual where that component has the clearest complete outline; valid indices are 1 through ${visualCount}. IDs must be unique lowercase kebab-case. Give dimensionsMm as [long side, short side, thickness] only when an explicit measurement or parsed CAD bound with confidence >= 0.75 belongs to that exact component; otherwise null. Copy supporting sourceId values into dimensionSourceIds, and leave it empty when dimensionsMm is null. Give thicknessMm only when documented or present in dimensionsMm. Return as many supported components as possible, up to ${MAX_INVENTORY_PARTS}.`,
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: `Project context and approved source summary: ${context}`,
+              text: `Project context and approved source summary: ${context}. ${photos.length} user visuals are followed by ${sourceImages.length} public-source visuals.`,
             },
-            ...imageParts,
+            ...localImageParts,
+            ...sourceImageParts,
           ],
         },
       ],
@@ -84,7 +150,7 @@ export async function POST(request: NextRequest) {
               items: {
                 type: "array",
                 minItems: 1,
-                maxItems: 10,
+                maxItems: MAX_INVENTORY_PARTS,
                 items: {
                   type: "object",
                   additionalProperties: false,
@@ -94,7 +160,7 @@ export async function POST(request: NextRequest) {
                     "category",
                     "description",
                     "samPrompt",
-                    "photoIndex",
+                    "imageIndex",
                     "thicknessMm",
                     "dimensionsMm",
                     "dimensionSourceIds",
@@ -108,10 +174,10 @@ export async function POST(request: NextRequest) {
                     category: { type: "string" },
                     description: { type: "string" },
                     samPrompt: { type: "string" },
-                    photoIndex: {
+                    imageIndex: {
                       type: "integer",
                       minimum: 1,
-                      maximum: 6,
+                      maximum: visualCount,
                     },
                     thicknessMm: {
                       anyOf: [

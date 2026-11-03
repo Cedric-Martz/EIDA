@@ -497,7 +497,7 @@ export function ReconstructionWorkflowDrawer({
                 aria-describedby={`${progressId}-download-detail`}
               >
                 <span>
-                  <small>Local · estimated</small>
+                  <small>Local - estimated</small>
                   {generating ? "Generating…" : "Generate 3D draft"}
                 </span>
                 <EidaIcon name="arrow-right" size={18} />

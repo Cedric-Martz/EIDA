@@ -21,10 +21,10 @@ The live local workflow is:
 
 1. Browser stores photos and project state in IndexedDB.
 2. The local Next.js server fetches only user-approved public HTTPS sources and extracts bounded HTML/text evidence.
-3. The server proxies Muse inventory and SAM 3.1 requests with the environment key or a session key.
-4. The browser builds silhouettes, GLB assets, assembly diagnostics and the viewer locally.
+3. The server proxies Muse inventory, SAM 3.1 masks and Muse multi-view geometry reconciliation with the environment key or a session key.
+4. The browser compiles canonical primitives, corrected GLB profiles, assembly diagnostics and the viewer locally.
 
-No paid search, GPU, database, queue, object storage or external CAD service is required. The optional `services/` directories are contracts/research material, not prerequisites.
+No paid search, GPU, database, queue, object storage or external CAD service is required. The hackathon build runs as the Next.js application in this repository; retired service prototypes are not part of the runtime.
 
 ## Create GitHub repo
 

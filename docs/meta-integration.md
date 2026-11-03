@@ -9,26 +9,30 @@ Official docs: https://dev.meta.ai/docs/overview and https://dev.meta.ai/docs/mo
 
 ## Current path
 
-The local Next.js server exposes four same-origin routes:
+The local Next.js server exposes seven same-origin routes:
 
 - `GET /api/meta/status` verifies the key and reports model availability.
-- `POST /api/meta/inventory` sends the extracted approved-source snapshot and up
-  to six explicitly approved photographs to Muse. A strict JSON schema limits the result to ten
-  visible, segmentable parts.
+- `POST /api/meta/inventory` sends the extracted approved-source snapshot, up
+  to 16 user photographs and 32 public-source images to Muse. A strict JSON
+  schema limits the result to 24 evidence-supported, segmentable parts.
 - `POST /api/meta/segment` asks SAM 3.1 for one part mask. The official
   `@meta-sam/parser` package decodes the response stream and converts the mask to
   an SVG contour.
+- `POST /api/meta/geometry` asks Muse to compare available viewpoints and
+  return one validated canonical primitive or corrected profile envelope for
+  every accepted SAM mask.
 - `POST /api/research/extract` fetches approved public HTTPS sources and returns
   bounded text, documented dimensions, source images and technical-file links.
+- `POST /api/research/search` combines iFixit with Muse Spark 1.3 live web
+  search targeted at manuals, photographs, specifications and 3D/CAD assets.
+- `POST /api/research/image` securely proxies a selected public image for SAM,
+  with public-address checks, redirect limits and a 12 MB bound.
 
-The browser then reprojects each contour into the source image, scales it from
-the reference device envelope (or a complete high-confidence documented
-dimension), simplifies it and extrudes it into a binary GLB. Geometry
-generation and assembly validation are local. Processing is sequential and only
-accepted visible masks become component geometry. When enabled, the narrower
-`services/mapanything-worker` runs the official Apache MapAnything script in
-parallel and returns a metric scene GLB plus a report. The former
-`services/meta-pipeline` contract remains an experimental full-pipeline path.
+The browser combines each contour with the validated geometry plan. Regular
+manufactured parts use canonical parametric primitives; genuinely irregular
+parts retain a corrected mask profile before local GLB extrusion. Graph
+compilation and assembly validation remain local. Only accepted visible masks
+become component geometry, and inferred dimensions stay explicitly estimated.
 
 The key comes from server-only `MODEL_API_KEY` in `.env.local`, or from a form
 field sent only to the local route through `x-eida-meta-key`. The latter stays in
@@ -41,18 +45,16 @@ image contour cannot establish hidden surfaces, depth or metrological scale.
 
 ## Runtime boundary
 
-No search API, database or object storage is required. Muse and SAM use the
-configured Meta Model API account. Optional MapAnything processing runs on a
-separate worker controlled by the operator. Contour processing, graph
-compilation and rendering remain local.
+No database or object storage is required. Muse web search, inventory and SAM
+use the configured Meta Model API account. Contour processing, graph compilation
+and rendering remain local.
 
-MapAnything now provides optional multi-view registration and a scene-level
-metric reference. Per-component mesh fitting, textured hidden surfaces, PDF
-text extraction, OCR, input-token preflight and monetary budget enforcement are
-not implemented. A ruler, known dimension, measured drawing or imported CAD
-still materially improves scale and fit. A protected remote backend would be
-required for a public multi-user deployment with shared credentials,
-authentication and server-enforced quotas.
+Metric camera calibration, textured hidden surfaces, PDF text extraction, OCR,
+input-token preflight and monetary budget enforcement are not implemented. A
+ruler, known dimension, measured drawing or imported CAD still materially
+improves scale and fit. A protected remote backend would be required for a
+public multi-user deployment with shared credentials, authentication and
+server-enforced quotas.
 
 ## Security note
 

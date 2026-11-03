@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { EidaIcon } from "@/components/ui/eida-icon";
+import { META_MODEL_LABELS } from "@/config/meta-models";
 import styles from "./eida-landing.module.css";
 
 const storySteps = [
@@ -10,9 +11,9 @@ const storySteps = [
     number: "01",
     status: "Available now",
     kicker: "Ground",
-    title: "Give Meta AI evidence, not a guess.",
-    body: "Name the device, review public repair sources, then add complementary photographs. Muse turns the approved material into a cited part inventory.",
-    detail: "Approved sources · local photo intake · Llama / Muse",
+    title: "Give information about the device.",
+    body: "Name the exact device variant, review general-web, manual and CAD results, then add complementary photographs. Muse turns the approved evidence into a cited part inventory.",
+    detail: `Reviewed sources - up to 48 visuals - ${META_MODEL_LABELS.inventory}`,
     visualTitle: "Grounded inventory",
     visualDetail: "Sources stay attached",
   },
@@ -21,8 +22,8 @@ const storySteps = [
     status: "Available now",
     kicker: "Separate",
     title: "Find the real outline of each part.",
-    body: "SAM 3.1 segments the housing, boards, battery, connectors and fasteners from the clearest approved view. Every returned mask remains visible before geometry is generated.",
-    detail: "SAM 3.1 masks · reviewable contours",
+    body: `${META_MODEL_LABELS.segmentation} segments each component from its clearest user or public-source image. Every returned mask remains visible before geometry is generated.`,
+    detail: `${META_MODEL_LABELS.segmentation} masks - reviewable contours`,
     visualTitle: "Parts isolated",
     visualDetail: "Views aligned by features",
   },
@@ -32,7 +33,7 @@ const storySteps = [
     kicker: "Reconstruct",
     title: "Rebuild the device, layer by layer.",
     body: "EIDA turns the approved contours and reference dimensions into local GLB parts, assembles them and checks their spatial relationships.",
-    detail: "Local geometry · assembly checks · PBR viewer",
+    detail: "Local geometry - assembly checks - PBR viewer",
     visualTitle: "Validated assembly",
     visualDetail: "Every artifact is inspectable",
   },
@@ -47,7 +48,7 @@ const guideSteps = [
   {
     number: "2",
     title: "Connect the Meta models",
-    body: "Open Meta reconstruction and add your Model API key. The studio checks Muse Spark and SAM 3.1 from the same screen.",
+    body: `Open Meta reconstruction and add your Model API key. The studio checks ${META_MODEL_LABELS.inventory} and ${META_MODEL_LABELS.segmentation} from the same screen.`,
   },
   {
     number: "3",
@@ -152,9 +153,12 @@ export function EidaLanding({
         <nav className={styles.nav} aria-label="Landing page">
           <a href="#method">How it works</a>
           <a href="#guide">Guide</a>
+          <a href="https://cedric-martz.github.io/EIDA/documentation">
+            Documentation
+          </a>
           <button type="button" onClick={openDemo}>
-            <span>Demo</span>
-            Open workbench
+            <span>Reference demo</span>
+            Open Framework 13
           </button>
         </nav>
       </header>
@@ -163,19 +167,13 @@ export function EidaLanding({
         <section className={styles.hero} aria-labelledby="landing-title">
           <div className={styles.heroGrid} aria-hidden="true" />
           <div className={styles.heroCopy}>
-            <p className={styles.eyebrow}>
-              <span>Open-source</span>
-              Evidence-based Intelligence for Disassembly &amp; Analysis
-            </p>
             <h1 id="landing-title">
-              Don&apos;t just see <em>the parts.</em>
-              <br />
-              See <strong>why they are there.</strong>
+              Evidence-based Intelligence for Disassembly & Analysis.
             </h1>
             <p className={styles.heroLede}>
-              EIDA combines Muse Spark and SAM 3.1 with local geometry tools to
-              turn reviewed device evidence into an inspectable 3D assembly,
-              directly in your workspace.
+              EIDA combines {META_MODEL_LABELS.inventory} and{" "}
+              {META_MODEL_LABELS.segmentation} to turn reviewed device evidence
+              into an inspectable 3D assembly, directly in your workspace.
             </p>
             <div className={styles.heroActions}>
               <button
@@ -185,38 +183,24 @@ export function EidaLanding({
                 aria-describedby="demo-disclaimer"
               >
                 <span>
-                  <small>Live workbench</small>
-                  Open the 3D workbench
+                  <small>Licensed reference dataset</small>
+                  Explore the Framework 13 demo
                 </span>
-                <EidaIcon name="external" size={20} />
+                <EidaIcon name="external" size={30} />
               </button>
               <a className={styles.secondaryCta} href="#guide">
                 Read the quick guide <EidaIcon name="arrow-down" size={16} />
               </a>
             </div>
-            <p className={styles.demoNote} id="demo-disclaimer">
-              <EidaIcon name="info" size={15} />
-              The live studio runs locally. Meta hosts Muse and SAM; your
-              computer creates and displays the GLB geometry.
-            </p>
           </div>
 
           <div className={styles.heroVisual}>
-            <div className={styles.visualChrome}>
-              <span>Evidence workspace</span>
-              <span>01 — 04</span>
-            </div>
+            <div className={styles.heroVisualScene} aria-hidden="true"></div>
             <DeviceStack stage={3} />
-            <div className={styles.heroReadout}>
-              <span>STATUS</span>
-              <strong>Evidence connected</strong>
-              <small>Sources, masks and parts stay linked</small>
-            </div>
           </div>
 
           <a className={styles.scrollCue} href="#method">
             <EidaIcon name="arrow-down" size={16} />
-            Scroll to follow the evidence
           </a>
         </section>
 
@@ -325,16 +309,9 @@ export function EidaLanding({
             Keep the evidence together.
           </h2>
           <button type="button" onClick={openDemo}>
-            <span>
-              <small>Live workbench</small>
-              Open the EIDA workbench
-            </span>
+            <span>Explore the reference reconstruction</span>
             <EidaIcon name="external" size={20} />
           </button>
-          <p>
-            No account required · Local browser project · Synthetic demo clearly
-            labelled
-          </p>
         </section>
       </div>
 

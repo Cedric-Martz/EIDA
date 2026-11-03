@@ -410,6 +410,16 @@ a svg {
 .viewer-workbench {
   position: relative;
   isolation: isolate;
+  --viewer-left-rail: 20px;
+  --viewer-right-rail: 20px;
+}
+
+.viewer-workbench.has-parts-panel {
+  --viewer-left-rail: 320px;
+}
+
+.viewer-workbench.has-inspector-panel {
+  --viewer-right-rail: 380px;
 }
 
 .spatial-viewer {
@@ -642,8 +652,10 @@ a svg {
   top: 46px;
   right: 0;
   width: 220px;
+  max-height: calc(100svh - 76px);
   padding: 7px;
   display: grid;
+  overflow-y: auto;
   border: 1px solid var(--eida-border);
   border-radius: 12px;
   background: rgba(247, 250, 251, 0.99);
@@ -780,8 +792,8 @@ a svg {
   position: absolute;
   z-index: 4;
   top: 84px;
-  right: 380px;
-  left: 320px;
+  right: var(--viewer-right-rail);
+  left: var(--viewer-left-rail);
   min-height: 66px;
   padding: 12px 16px;
   display: flex;
@@ -789,6 +801,19 @@ a svg {
   justify-content: space-between;
   gap: 18px;
   border-left: 3px solid var(--eida-accent);
+  transition:
+    right 180ms ease,
+    left 180ms ease;
+}
+
+.scene-status > div:first-child {
+  min-width: 0;
+}
+
+.scene-status h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scene-status h2,
@@ -808,6 +833,7 @@ a svg {
 }
 
 .scene-mode-actions {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -1470,6 +1496,7 @@ a svg {
   max-height: calc(100% - 134px);
   overflow: auto;
   scrollbar-width: thin;
+  overscroll-behavior: contain;
 }
 
 .parts-panel {
@@ -1597,7 +1624,7 @@ a svg {
   position: absolute;
   z-index: 7;
   top: 170px;
-  left: 20px;
+  left: var(--viewer-left-rail);
   padding: 6px;
   display: grid;
   gap: 4px;
@@ -1605,6 +1632,19 @@ a svg {
   border-radius: 12px;
   background: rgba(247, 250, 251, 0.94);
   box-shadow: 0 14px 32px rgba(39, 59, 68, 0.16);
+  transition:
+    left 180ms ease,
+    bottom 180ms ease;
+}
+
+.viewer-toolbar button:focus-visible,
+.scene-mode-actions button:focus-visible,
+.panel-close:focus-visible,
+.parts-list button:focus-visible,
+.viewer-menu summary:focus-visible,
+.viewer-menu button:focus-visible {
+  outline: 2px solid var(--eida-accent);
+  outline-offset: 2px;
 }
 
 .viewer-toolbar button {
@@ -1963,6 +2003,71 @@ a svg {
   color: var(--eida-muted);
 }
 
+.evidence-source-list a {
+  width: max-content;
+  color: var(--eida-accent);
+  font-size: 9px;
+  text-decoration: none;
+}
+
+.evidence-source-list a:hover {
+  text-decoration: underline;
+}
+
+.demo-evidence-assets {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.demo-evidence-assets > a {
+  overflow: hidden;
+  display: grid;
+  border: 1px solid var(--eida-border);
+  border-radius: 9px;
+  background: rgba(29, 48, 57, 0.035);
+  color: var(--eida-text);
+  text-decoration: none;
+}
+
+.demo-evidence-assets img {
+  width: 100%;
+  height: 118px;
+  display: block;
+  object-fit: cover;
+}
+
+.demo-evidence-assets > a > span {
+  padding: 7px 9px;
+  color: var(--eida-muted);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.demo-evidence-assets .demo-cad-download {
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-color: rgba(57, 118, 101, 0.28);
+  color: #315f53;
+}
+
+.demo-cad-download > span {
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  color: inherit;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.demo-cad-download small {
+  color: var(--eida-muted);
+  font-size: 8px;
+  font-weight: 400;
+}
+
 .viewer-empty-state {
   color: var(--eida-muted);
   font-size: 13px;
@@ -2097,30 +2202,6 @@ a svg {
   line-height: 1.45;
 }
 
-/* Browser-owned Meta credentials */
-.byok-overlay {
-  z-index: 40;
-}
-
-.byok-dialog {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: min(610px, calc(100% - 28px));
-  max-height: calc(100svh - 28px);
-  padding: 24px;
-  overflow: auto;
-  transform: translate(-50%, -50%);
-  background: rgba(250, 248, 242, 0.99);
-}
-
-.byok-intro,
-.byok-disclosure {
-  color: var(--eida-muted);
-  font-size: 11px;
-  line-height: 1.6;
-}
-
 .analysis-result {
   position: absolute;
   z-index: 18;
@@ -2171,293 +2252,6 @@ a svg {
   font-size: 8px;
 }
 
-.byok-intro {
-  margin: 12px 0 18px;
-}
-
-.byok-step {
-  padding: 16px;
-  border: 1px solid var(--eida-border);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.56);
-}
-
-.byok-step + .byok-step {
-  margin-top: 12px;
-}
-
-.byok-step__heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.byok-step__heading > span {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid rgba(226, 90, 56, 0.28);
-  border-radius: 9px;
-  background: rgba(226, 90, 56, 0.07);
-  color: var(--eida-accent);
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.byok-step__heading div {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.byok-step__heading strong {
-  font-size: 12px;
-}
-
-.byok-step__heading small {
-  color: var(--eida-muted);
-  font-size: 9px;
-  line-height: 1.4;
-}
-
-.byok-field {
-  margin-top: 13px;
-  display: grid;
-  gap: 7px;
-}
-
-.byok-field > span {
-  color: #5c696f;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.byok-field input,
-.byok-field select {
-  width: 100%;
-  min-height: 46px;
-  padding: 0 12px;
-  border: 1px solid var(--eida-border);
-  border-radius: 10px;
-  outline: 0;
-  background: #fff;
-  color: var(--eida-text);
-  font-size: 12px;
-}
-
-.byok-field input:focus,
-.byok-field select:focus {
-  border-color: rgba(226, 90, 56, 0.62);
-  box-shadow: 0 0 0 3px rgba(226, 90, 56, 0.09);
-}
-
-.byok-remember {
-  margin-top: 16px;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  color: #536168;
-  cursor: pointer;
-  font-size: 10px;
-  line-height: 1.45;
-}
-
-.byok-analysis-step {
-  border-color: rgba(226, 90, 56, 0.24);
-  background: rgba(226, 90, 56, 0.035);
-}
-
-.byok-analysis-summary {
-  margin-top: 14px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 7px;
-}
-
-.byok-analysis-summary > span {
-  min-height: 52px;
-  padding: 9px 11px;
-  display: grid;
-  align-content: center;
-  gap: 3px;
-  border: 1px solid var(--eida-border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.7);
-}
-
-.byok-analysis-summary small {
-  color: var(--eida-muted);
-  font-size: 8px;
-  text-transform: uppercase;
-}
-
-.byok-analysis-summary strong {
-  font-size: 10px;
-}
-
-.byok-consent {
-  margin-top: 12px;
-  padding: 11px;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  border: 1px solid var(--eida-border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
-  color: #536168;
-  cursor: pointer;
-  font-size: 10px;
-  line-height: 1.45;
-}
-
-.byok-consent input {
-  margin-top: 2px;
-  accent-color: var(--eida-accent);
-}
-
-.byok-consent span {
-  display: grid;
-  gap: 2px;
-}
-
-.byok-consent small {
-  color: var(--eida-muted);
-  font-size: 8px;
-}
-
-.byok-remember input {
-  margin-top: 2px;
-  accent-color: var(--eida-accent);
-}
-
-.byok-remember small {
-  margin-top: 2px;
-  display: block;
-  color: #7a858a;
-  font-size: 9px;
-}
-
-.byok-status {
-  min-height: 44px;
-  margin-top: 18px;
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  border: 1px solid var(--eida-border);
-  border-radius: 10px;
-  background: rgba(29, 48, 57, 0.035);
-  color: var(--eida-muted);
-  font-size: 10px;
-  line-height: 1.4;
-}
-
-.byok-status i {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: #969c9f;
-}
-
-.byok-status--testing i {
-  background: var(--eida-accent);
-}
-
-.byok-status--valid {
-  border-color: rgba(62, 155, 120, 0.28);
-  color: #33785f;
-}
-
-.byok-status--valid i {
-  background: #3e9b78;
-}
-
-.byok-status--invalid {
-  border-color: rgba(185, 75, 49, 0.28);
-  color: var(--eida-warning);
-}
-
-.byok-status--invalid i {
-  background: var(--eida-warning);
-}
-
-.byok-actions {
-  margin-top: 12px;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-}
-
-.byok-actions button {
-  min-height: 44px;
-  padding: 0 15px;
-  border: 1px solid var(--eida-border);
-  border-radius: 10px;
-  background: rgba(29, 48, 57, 0.035);
-  color: var(--eida-muted);
-  cursor: pointer;
-  font-size: 10px;
-}
-
-.byok-actions button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.byok-actions .byok-primary {
-  border-color: var(--eida-accent);
-  background: var(--eida-accent);
-  color: #fff;
-}
-
-.byok-analyze-button {
-  width: 100%;
-  min-height: 52px;
-  margin-top: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid var(--eida-accent);
-  border-radius: 11px;
-  background: var(--eida-accent);
-  box-shadow: 0 10px 24px rgba(226, 90, 56, 0.2);
-  color: #fff;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  transition:
-    transform 160ms ease,
-    box-shadow 160ms ease,
-    opacity 160ms ease;
-}
-
-.byok-analyze-button:not(:disabled):hover {
-  box-shadow: 0 13px 28px rgba(226, 90, 56, 0.28);
-  transform: translateY(-1px);
-}
-
-.byok-analyze-button:disabled {
-  border-color: #b7bcbd;
-  background: #b7bcbd;
-  box-shadow: none;
-  cursor: not-allowed;
-  opacity: 0.62;
-}
-
-.byok-disclosure {
-  margin: 10px 0 0;
-  padding: 0;
-  border: 0;
-  font-size: 9px;
-  text-align: center;
-}
-
 .upload-zone {
   width: 100%;
   min-height: 180px;
@@ -2477,6 +2271,10 @@ a svg {
 .upload-zone:hover:not(:disabled) {
   border-color: var(--eida-accent);
   background: #ebe6dc;
+}
+.upload-zone[data-dragging="true"] {
+  border-color: #df5b39;
+  background: #fff3ed;
 }
 
 .upload-zone:disabled {
@@ -2628,9 +2426,13 @@ a svg {
 }
 
 @media (max-width: 1100px) {
+  .viewer-workbench.has-inspector-panel {
+    --viewer-right-rail: 330px;
+  }
+
   .scene-status {
-    right: 320px;
-    left: 20px;
+    right: var(--viewer-right-rail);
+    left: var(--viewer-left-rail);
   }
 
   .parts-panel {
@@ -2664,6 +2466,13 @@ a svg {
 }
 
 @media (max-width: 900px) {
+  .viewer-workbench,
+  .viewer-workbench.has-parts-panel,
+  .viewer-workbench.has-inspector-panel {
+    --viewer-left-rail: 10px;
+    --viewer-right-rail: 10px;
+  }
+
   .landing-hero {
     grid-template-columns: minmax(0, 1fr) minmax(290px, 0.75fr);
     padding-right: 30px;
@@ -2919,6 +2728,12 @@ a svg {
 
   .scene-mode-actions {
     gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .scene-mode-actions::-webkit-scrollbar {
+    display: none;
   }
 
   .scene-mode-actions button {
@@ -2944,6 +2759,7 @@ a svg {
     left: 10px;
     width: auto;
     max-height: 40vh;
+    box-shadow: 0 18px 42px rgba(39, 59, 68, 0.2);
   }
 
   .component-inspector {
@@ -2955,6 +2771,7 @@ a svg {
     max-height: 43vh;
     padding: 14px 16px;
     border-radius: 18px;
+    box-shadow: 0 18px 48px rgba(39, 59, 68, 0.24);
   }
 
   .inspector-grip {
@@ -3044,12 +2861,6 @@ a svg {
 
   .capture-next-step button {
     width: 100%;
-  }
-
-  .byok-dialog {
-    width: calc(100% - 16px);
-    max-height: calc(100svh - 16px);
-    padding: 18px;
   }
 
   .photo-grid {

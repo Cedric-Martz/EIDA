@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from "dexie";
 import type { InferenceRun } from "@/domain/inference/run";
+import type { CadAnalysis } from "@/domain/research";
 
 export interface LocalProjectRecord {
   id: string;
@@ -17,6 +18,7 @@ export interface LocalAssetRecord {
   size: number;
   createdAt: number;
   blob: Blob;
+  cadAnalysis?: CadAnalysis;
 }
 
 export interface LocalResearchSourceRecord {

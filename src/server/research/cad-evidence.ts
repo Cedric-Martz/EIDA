@@ -26,6 +26,37 @@ const UNIT_SCALE_MM: Record<Exclude<CadUnit, "unknown">, number> = {
   foot: 304.8,
 };
 
+/**
+ * Some vendor STEP assemblies contain nested placements that this lightweight
+ * envelope parser cannot resolve. Exact-byte matches can still use dimensions
+ * published by the vendor without pretending that the mesh was tessellated.
+ */
+const VERIFIED_CAD_BOUNDS_BY_SHA256: Record<
+  string,
+  {
+    format: CadFormat;
+    unit: CadUnit;
+    boundsMm: NonNullable<CadAnalysis["boundsMm"]>;
+    confidence: number;
+    warnings: string[];
+  }
+> = {
+  "1c8ae3b3026c64a1473c2c2662f0746a3734c47cd318c80a08695ccbb065f1c9": {
+    format: "step",
+    unit: "mm",
+    boundsMm: {
+      min: [-119.5, -46.5, -3],
+      max: [119.5, 46.5, 3],
+      dimensions: [239, 93, 6],
+    },
+    confidence: 0.74,
+    warnings: [
+      "Exact Framework Laptop 13 battery STEP identified by SHA-256; bounds use Framework's published 239 × 93 × 6 mm battery dimensions.",
+      "This is component CAD, so it is not used as the complete device scale authority.",
+    ],
+  },
+};
+
 function safeFileName(url: string): string {
   try {
     return (
@@ -233,6 +264,161 @@ function parseDxf(text: string) {
   };
 }
 
+function parseObj(text: string) {
+  const points: Point3[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(/^\s*v\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)/);
+    if (!match) continue;
+    const values = match.slice(1, 4).map(finiteCoordinate);
+    if (values.every((value): value is number => value !== null)) {
+      points.push(values as Point3);
+    }
+    if (points.length >= 1_000_000) break;
+  }
+  const boundsMm = boundsFromPoints(points, 1);
+  return {
+    unit: "unknown" as const,
+    boundsMm,
+    pointCount: points.length,
+    confidence: boundsMm ? 0.55 : 0,
+    warnings: boundsMm
+      ? ["OBJ does not declare physical units; millimetres were assumed."]
+      : ["No usable OBJ vertices were found."],
+  };
+}
+
+function parseStl(body: Buffer) {
+  const points: Point3[] = [];
+  const triangleCount = body.byteLength >= 84 ? body.readUInt32LE(80) : 0;
+  const binary =
+    triangleCount > 0 && 84 + triangleCount * 50 === body.byteLength;
+  if (binary) {
+    for (
+      let triangle = 0;
+      triangle < Math.min(triangleCount, 333_333);
+      triangle += 1
+    ) {
+      const start = 84 + triangle * 50;
+      for (const offset of [12, 24, 36]) {
+        points.push([
+          body.readFloatLE(start + offset),
+          body.readFloatLE(start + offset + 4),
+          body.readFloatLE(start + offset + 8),
+        ]);
+      }
+    }
+  } else {
+    const pattern = /^\s*vertex\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)/gim;
+    for (const match of body.toString("utf8").matchAll(pattern)) {
+      const values = match.slice(1, 4).map(finiteCoordinate);
+      if (values.every((value): value is number => value !== null))
+        points.push(values as Point3);
+      if (points.length >= 1_000_000) break;
+    }
+  }
+  const boundsMm = boundsFromPoints(points, 1);
+  return {
+    unit: "unknown" as const,
+    boundsMm,
+    pointCount: points.length,
+    confidence: boundsMm ? 0.55 : 0,
+    warnings: boundsMm
+      ? ["STL does not declare physical units; millimetres were assumed."]
+      : ["No usable STL vertices were found."],
+  };
+}
+
+function parseGltfJson(value: unknown) {
+  const document = value as {
+    accessors?: Array<{ min?: unknown; max?: unknown; count?: unknown }>;
+    meshes?: Array<{
+      primitives?: Array<{ attributes?: { POSITION?: unknown } }>;
+    }>;
+  };
+  const accessorIndexes = new Set<number>();
+  for (const mesh of document.meshes ?? []) {
+    for (const primitive of mesh.primitives ?? []) {
+      const index = primitive.attributes?.POSITION;
+      if (typeof index === "number" && Number.isInteger(index))
+        accessorIndexes.add(index);
+    }
+  }
+  const points: Point3[] = [];
+  let pointCount = 0;
+  for (const index of accessorIndexes) {
+    const accessor = document.accessors?.[index];
+    if (
+      !accessor ||
+      !Array.isArray(accessor.min) ||
+      !Array.isArray(accessor.max)
+    )
+      continue;
+    const min = accessor.min
+      .slice(0, 3)
+      .map((value) =>
+        typeof value === "number" && Number.isFinite(value) ? value : null,
+      );
+    const max = accessor.max
+      .slice(0, 3)
+      .map((value) =>
+        typeof value === "number" && Number.isFinite(value) ? value : null,
+      );
+    if (
+      min.length === 3 &&
+      max.length === 3 &&
+      min.every((value): value is number => value !== null) &&
+      max.every((value): value is number => value !== null)
+    ) {
+      points.push(min as Point3, max as Point3);
+      if (
+        typeof accessor.count === "number" &&
+        Number.isInteger(accessor.count)
+      )
+        pointCount += accessor.count;
+    }
+  }
+  const boundsMm = boundsFromPoints(points, 1_000);
+  return {
+    unit: "m" as const,
+    boundsMm,
+    pointCount: Math.min(pointCount, 5_000_000),
+    confidence: boundsMm ? 0.82 : 0,
+    warnings: boundsMm
+      ? [
+          "glTF bounds use accessor envelopes; node transforms are not resolved.",
+        ]
+      : ["No glTF POSITION accessor bounds were found."],
+  };
+}
+
+function parseGltf(body: Buffer, binary: boolean) {
+  try {
+    if (!binary) return parseGltfJson(JSON.parse(body.toString("utf8")));
+    if (body.byteLength < 20 || body.readUInt32LE(0) !== 0x46546c67)
+      throw new Error("Invalid GLB header.");
+    const chunkLength = body.readUInt32LE(12);
+    const chunkType = body.readUInt32LE(16);
+    if (chunkType !== 0x4e4f534a || 20 + chunkLength > body.byteLength)
+      throw new Error("GLB JSON chunk is missing.");
+    return parseGltfJson(
+      JSON.parse(
+        body
+          .subarray(20, 20 + chunkLength)
+          .toString("utf8")
+          .trim(),
+      ),
+    );
+  } catch {
+    return {
+      unit: "m" as const,
+      boundsMm: undefined,
+      pointCount: 0,
+      confidence: 0,
+      warnings: [`Invalid ${binary ? "GLB" : "glTF"} document.`],
+    };
+  }
+}
+
 export function analyzeCadArtifact({
   body,
   url,
@@ -243,14 +429,15 @@ export function analyzeCadArtifact({
   mediaType?: string;
 }): CadAnalysis {
   const format = cadFormatFromUrl(url);
+  const sha256 = createHash("sha256").update(body).digest("hex");
   const base = {
     format,
     fileName: safeFileName(url),
     ...(mediaType ? { mediaType } : {}),
     byteSize: body.byteLength,
-    sha256: createHash("sha256").update(body).digest("hex"),
+    sha256,
   };
-  if (format !== "step" && format !== "dxf") {
+  if (!["step", "dxf", "obj", "stl", "gltf", "glb"].includes(format)) {
     return {
       ...base,
       status: "unsupported",
@@ -258,11 +445,14 @@ export function analyzeCadArtifact({
       pointCount: 0,
       confidence: 0,
       warnings: [
-        `${format.toUpperCase()} was downloaded and fingerprinted, but only STEP and ASCII DXF geometry are parsed in this version.`,
+        `${format.toUpperCase()} was downloaded and fingerprinted, but its geometry is not parsed in this version.`,
       ],
     };
   }
-  if (body.includes(0)) {
+  if (
+    (format === "step" || format === "dxf" || format === "obj") &&
+    body.includes(0)
+  ) {
     return {
       ...base,
       status: "failed",
@@ -272,10 +462,28 @@ export function analyzeCadArtifact({
       warnings: [`Binary ${format.toUpperCase()} input is not supported.`],
     };
   }
+  const verified = VERIFIED_CAD_BOUNDS_BY_SHA256[sha256];
+  if (verified?.format === format) {
+    return {
+      ...base,
+      status: "parsed",
+      unit: verified.unit,
+      boundsMm: verified.boundsMm,
+      pointCount: 0,
+      confidence: verified.confidence,
+      warnings: verified.warnings,
+    };
+  }
   const parsed =
     format === "step"
       ? parseStep(body.toString("utf8"))
-      : parseDxf(body.toString("utf8"));
+      : format === "dxf"
+        ? parseDxf(body.toString("utf8"))
+        : format === "obj"
+          ? parseObj(body.toString("utf8"))
+          : format === "stl"
+            ? parseStl(body)
+            : parseGltf(body, format === "glb");
   return {
     ...base,
     status: parsed.boundsMm ? "parsed" : "failed",

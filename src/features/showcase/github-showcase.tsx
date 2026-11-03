@@ -24,7 +24,7 @@ const chapters = [
     index: "01",
     label: "Observe",
     title: "Photos become connected views.",
-    body: "SAM isolates components. MapAnything aligns up to eight views in a shared metric frame.",
+    body: "Muse combines user views with public technical images, then SAM isolates each evidence-supported component.",
   },
   {
     index: "02",
@@ -104,7 +104,7 @@ function ScrollReconstruction() {
         </div>
         <div className={styles.storyCopy}>
           <span className={styles.kicker}>
-            {chapters[active].index} · {chapters[active].label}
+            {chapters[active].index} - {chapters[active].label}
           </span>
           <h2>{chapters[active].title}</h2>
           <p>{chapters[active].body}</p>
@@ -167,7 +167,7 @@ export function GithubShowcase() {
         <div className={styles.heroSignal} aria-hidden="true">
           <span>PHOTO</span>
           <i />
-          <span>MAP</span>
+          <span>EVIDENCE</span>
           <i />
           <span>GRAPH</span>
           <i />
@@ -177,7 +177,7 @@ export function GithubShowcase() {
 
       <section className={styles.promise} aria-label="Pipeline EIDA">
         <span>SAM</span>
-        <span>MapAnything</span>
+        <span>Web + CAD</span>
         <span>Muse Spark</span>
         <span>.eida.json</span>
       </section>
@@ -196,9 +196,10 @@ export function GithubShowcase() {
           <li>
             <span>02</span>
             <div>
-              <strong>MapAnything Apache</strong>
+              <strong>Technical evidence</strong>
               <p>
-                A local worker aligns the views in a shared coordinate system.
+                Live web search finds manuals, internal images, dimensions and
+                3D/CAD documents for review.
               </p>
             </div>
           </li>
@@ -224,7 +225,7 @@ export function GithubShowcase() {
       </section>
 
       <footer className={styles.footer}>
-        <span>EIDA · Open source</span>
+        <span>EIDA - Open source</span>
         <a href="#top">
           Back to top <EidaIcon name="arrow-up" size={14} />
         </a>

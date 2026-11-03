@@ -13,6 +13,7 @@ import {
   metaHeaders,
   sseEvents,
 } from "@/server/meta/model-api";
+import { META_MODELS } from "@/config/meta-models";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
     cache: "no-store",
     signal: AbortSignal.timeout(120_000),
     body: JSON.stringify({
-      model: "sam-3.1",
+      model: META_MODELS.segmentation,
       input: [
         {
           type: "message",

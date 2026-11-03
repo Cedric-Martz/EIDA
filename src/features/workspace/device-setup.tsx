@@ -288,7 +288,7 @@ export function DeviceSetup({
                 <div>
                   <strong>{identity.model}</strong>
                   <small>
-                    {identity.manufacturer} · identity selected from the local
+                    {identity.manufacturer} - identity selected from the local
                     catalog
                   </small>
                 </div>
@@ -312,7 +312,7 @@ export function DeviceSetup({
         <footer className="project-setup-footer">
           <span>Want to learn the controls first?</span>
           <button type="button" onClick={onOpenDemo}>
-            Open the clearly labelled synthetic demo
+            Open the evidence-backed reference demo
           </button>
         </footer>
       </div>
