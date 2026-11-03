@@ -37,6 +37,11 @@ export function EidaWorkspace() {
 
   useEffect(() => {
     setHydrated(true);
+    if (
+      new URLSearchParams(window.location.search).get("demo") === "reference"
+    ) {
+      setWorkspaceSource("demo");
+    }
   }, []);
 
   // Keep the server render and the browser's first render identical. This also

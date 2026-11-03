@@ -100,7 +100,7 @@ export const extractedWebSourceSchema = z.object({
 export const webEvidenceBundleSchema = z.object({
   schemaVersion: z.literal(1),
   extractedAt: z.number().int().nonnegative(),
-  sources: z.array(extractedWebSourceSchema).min(1).max(10),
+  sources: z.array(extractedWebSourceSchema).min(1).max(20),
 });
 
 export type ExtractedDimension = z.infer<typeof extractedDimensionSchema>;

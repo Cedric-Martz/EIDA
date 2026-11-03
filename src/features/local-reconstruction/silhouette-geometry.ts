@@ -7,8 +7,13 @@ import {
   Shape,
   Vector2,
 } from "three";
-import type { AssemblyManifest, DimensionsMm } from "@/domain/assembly";
 import type {
+  AssemblyManifest,
+  DimensionsMm,
+  GeometryAsset,
+} from "@/domain/assembly";
+import type {
+  LocalGeometryPlan,
   LocalPartInventory,
   LocalSegmentationResult,
 } from "@/domain/local-reconstruction";
@@ -20,6 +25,7 @@ import {
   type ReconstructionPart,
 } from "@/domain/reconstruction-graph";
 import type { LocalAssetRecord } from "@/storage/indexed-db/db";
+import { META_MODEL_LABELS } from "@/config/meta-models";
 
 type Point = readonly [number, number];
 
@@ -27,7 +33,29 @@ export type SegmentedPart = {
   item: LocalPartInventory["items"][number];
   segmentation: LocalSegmentationResult;
   photo: LocalAssetRecord;
+  origin?: {
+    kind: "user-photo" | "web-source";
+    locator: string;
+    sourceId?: string;
+  };
 };
+
+export function ensureWebSourceEvidence(
+  evidence: Map<string, ReconstructionEvidence>,
+  origin: SegmentedPart["origin"],
+): string | undefined {
+  if (origin?.kind !== "web-source" || !origin.sourceId) return undefined;
+  const evidenceId = graphId("source", origin.sourceId);
+  if (!evidence.has(evidenceId)) {
+    evidence.set(evidenceId, {
+      id: evidenceId,
+      kind: "web-source",
+      label: `Approved web source - ${origin.sourceId}`,
+      locator: origin.locator,
+    });
+  }
+  return evidenceId;
+}
 
 const categoryDepth: Record<string, number> = {
   board: 1.6,
@@ -52,6 +80,34 @@ const categoryColor: Record<string, string> = {
   connector: "#8d9294",
   speaker: "#3b4346",
 };
+
+export function boundCanonicalDimensions(
+  input: readonly [number, number, number],
+  device: DimensionsMm,
+): DimensionsMm {
+  const [long, short] = [...input.slice(0, 2)].sort(
+    (left, right) => right - left,
+  );
+  const deviceLong = Math.max(device[0], device[1]);
+  const deviceShort = Math.min(device[0], device[1]);
+  return [
+    Math.max(0.1, Math.min(long!, deviceLong * 1.1)),
+    Math.max(0.1, Math.min(short!, deviceShort * 1.1)),
+    Math.max(0.1, Math.min(input[2], Math.max(device[2] * 2, 20))),
+  ];
+}
+
+export function boundRoundedBoxRadius(
+  requestedRadius: number | null | undefined,
+  dimensions: DimensionsMm,
+): number {
+  const smallestDimension = Math.min(...dimensions);
+  const fallbackRadius = Math.min(dimensions[0], dimensions[1]) * 0.04;
+  return Math.min(
+    Math.max(requestedRadius ?? fallbackRadius, 0.001),
+    smallestDimension * 0.49,
+  );
+}
 
 function graphId(prefix: string, value: string): string {
   const safe = value
@@ -227,7 +283,7 @@ async function exportPartGlb(
     metalness: 0.08,
   });
   const mesh = new Mesh(geometry, material);
-  mesh.name = "SAM 3.1 silhouette reconstruction";
+  mesh.name = `${META_MODEL_LABELS.segmentation} silhouette reconstruction`;
   const exporter = new GLTFExporter();
   const result = await exporter.parseAsync(mesh, {
     binary: true,
@@ -261,7 +317,7 @@ export async function generateGraphAssets(
     );
     assets.push({
       id: part.geometry.assetId,
-      label: `${part.label} · compiled EIDA profile`,
+      label: `${part.label} - compiled EIDA profile`,
       uri: arrayBufferToDataUrl(glb),
       format: "glb",
       millimetresPerAssetUnit: 1,
@@ -281,22 +337,79 @@ export type ReconstructionGraphBuild = {
   manifest: AssemblyManifest;
 };
 
+export type PrimaryCadGeometry = {
+  asset: GeometryAsset;
+  evidence: ReconstructionEvidence;
+};
+
 export async function buildReconstructionGraphAssembly({
   projectId,
   label,
   dimensionsMm,
   parts,
+  geometryPlan,
+  primaryCad,
 }: {
   projectId: string;
   label: string;
   dimensionsMm: DimensionsMm;
   parts: readonly SegmentedPart[];
+  geometryPlan?: LocalGeometryPlan | null;
+  primaryCad?: PrimaryCadGeometry | null;
 }): Promise<ReconstructionGraphBuild> {
   const graphParts: ReconstructionPart[] = [];
   const graphEvidence = new Map<string, ReconstructionEvidence>();
   const createdAt = Date.now();
+  const geometryByPartId = new Map(
+    geometryPlan?.items.map((item) => [item.id, item]) ?? [],
+  );
+
+  if (primaryCad) {
+    const { minMm, maxMm } = primaryCad.asset.boundsMm!;
+    const centerMm = minMm.map(
+      (minimum, axis) => (minimum + maxMm[axis]!) / 2,
+    ) as [number, number, number];
+    graphEvidence.set(primaryCad.evidence.id, primaryCad.evidence);
+    graphParts.push({
+      id: "imported-device-cad",
+      label: primaryCad.asset.label ?? "Imported device CAD",
+      category: "housing",
+      geometry: {
+        kind: "mesh-reference",
+        assetId: primaryCad.asset.id,
+        format: primaryCad.asset.format as "glb",
+        boundsMm: primaryCad.asset.boundsMm!,
+      },
+      transform: {
+        positionMm: centerMm.map((value) => -value) as [number, number, number],
+        rotationRad: [0, 0, 0],
+        scale: [1, 1, 1],
+      },
+      explodedVectorMm: [0, 0, -24],
+      fidelity: "exact",
+      evidence: {
+        presence: [primaryCad.evidence.id],
+        outline: [primaryCad.evidence.id],
+        dimensions: [primaryCad.evidence.id],
+        depth: [primaryCad.evidence.id],
+        transform: [primaryCad.evidence.id],
+        material: [primaryCad.evidence.id],
+      },
+      assumptions: [],
+    });
+  }
 
   for (const [index, part] of parts.entries()) {
+    if (
+      primaryCad &&
+      ["housing", "display", "screen"].includes(
+        part.item.category.toLowerCase(),
+      )
+    ) {
+      // A reviewed whole-device mesh owns the exterior. Images remain useful
+      // for complementary internals instead of creating overlapping shells.
+      continue;
+    }
     const mask = part.segmentation.masks[0];
     if (!mask || !mask.svgPath) continue;
     const polygons = svgPathPolygons(mask.svgPath);
@@ -327,11 +440,26 @@ export async function buildReconstructionGraphAssembly({
         ] as Point,
     );
     if (simplified.length < 3) continue;
-    if (part.item.dimensionsMm) {
-      simplified = fitPolygonToCadBounds(simplified, part.item.dimensionsMm);
+    const geometryCorrection = geometryByPartId.get(part.item.id);
+    const canonicalDimensions = part.item.dimensionsMm
+      ? ([...part.item.dimensionsMm] as DimensionsMm)
+      : geometryCorrection
+        ? boundCanonicalDimensions(
+            geometryCorrection.dimensionsMm,
+            dimensionsMm,
+          )
+        : null;
+    const profileDimensions =
+      part.item.dimensionsMm ??
+      (geometryCorrection?.primitive === "mask_profile"
+        ? canonicalDimensions
+        : null);
+    if (profileDimensions) {
+      simplified = fitPolygonToCadBounds(simplified, profileDimensions);
     }
     const depthMm =
       part.item.dimensionsMm?.[2] ??
+      canonicalDimensions?.[2] ??
       part.item.thicknessMm ??
       categoryDepth[part.item.category.toLowerCase()] ??
       3;
@@ -340,30 +468,49 @@ export async function buildReconstructionGraphAssembly({
     const assetId = `sam-mask-${part.item.id}`;
     const photoEvidenceId = graphId("photo", part.item.id);
     const maskEvidenceId = graphId("mask", part.item.id);
+    const geometryEvidenceId = geometryCorrection
+      ? graphId("geometry", part.item.id)
+      : null;
+    const webSourceEvidenceId = ensureWebSourceEvidence(
+      graphEvidence,
+      part.origin,
+    );
     const dimensionEvidence = part.item.dimensionSourceIds.map((sourceId) =>
       graphId("source", sourceId),
     );
     graphEvidence.set(photoEvidenceId, {
       id: photoEvidenceId,
-      kind: "user-photo",
+      kind: part.origin?.kind ?? "user-photo",
       label: part.photo.name,
-      locator: part.photo.id,
+      locator: part.origin?.locator ?? part.photo.id,
+      ...(webSourceEvidenceId ? { sourceId: webSourceEvidenceId } : {}),
     });
     graphEvidence.set(maskEvidenceId, {
       id: maskEvidenceId,
       kind: "segmentation-mask",
-      label: `${part.item.label} · SAM 3.1 mask`,
+      label: `${part.item.label} - ${META_MODEL_LABELS.segmentation} mask`,
       sourceId: photoEvidenceId,
       confidence: mask.confidence ?? undefined,
     });
+    if (geometryCorrection && geometryEvidenceId) {
+      graphEvidence.set(geometryEvidenceId, {
+        id: geometryEvidenceId,
+        kind: "generated-mesh",
+        label: `${part.item.label} - multi-view canonical geometry`,
+        locator: geometryCorrection.basis,
+        confidence: geometryCorrection.confidence,
+      });
+    }
     part.item.dimensionSourceIds.forEach((sourceId, index) => {
       const evidenceId = dimensionEvidence[index]!;
-      graphEvidence.set(evidenceId, {
-        id: evidenceId,
-        kind: "document",
-        label: `Reviewed dimension source · ${sourceId}`,
-        locator: sourceId,
-      });
+      if (!graphEvidence.has(evidenceId)) {
+        graphEvidence.set(evidenceId, {
+          id: evidenceId,
+          kind: "document",
+          label: `Reviewed dimension source - ${sourceId}`,
+          locator: sourceId,
+        });
+      }
     });
     const centerX = (mask.bounds.left + mask.bounds.right) / 2;
     const centerY = (mask.bounds.top + mask.bounds.bottom) / 2;
@@ -377,17 +524,35 @@ export async function buildReconstructionGraphAssembly({
     const depthDocumented =
       (part.item.dimensionsMm !== null || part.item.thicknessMm !== null) &&
       dimensionEvidence.length > 0;
+    const geometry =
+      geometryCorrection &&
+      canonicalDimensions &&
+      geometryCorrection.primitive !== "mask_profile"
+        ? {
+            kind: "primitive" as const,
+            primitive: geometryCorrection.primitive,
+            dimensionsMm: canonicalDimensions,
+            ...(geometryCorrection.primitive === "rounded_box"
+              ? {
+                  cornerRadiusMm: boundRoundedBoxRadius(
+                    geometryCorrection.cornerRadiusMm,
+                    canonicalDimensions,
+                  ),
+                }
+              : {}),
+          }
+        : {
+            kind: "profile-extrusion" as const,
+            profileMm: centeredProfile,
+            depthMm,
+            bevelMm: Math.min(0.45, depthMm * 0.08),
+            assetId,
+          };
     graphParts.push({
       id: part.item.id,
       label: part.item.label,
       category: part.item.category,
-      geometry: {
-        kind: "profile-extrusion",
-        profileMm: centeredProfile,
-        depthMm,
-        bevelMm: Math.min(0.45, depthMm * 0.08),
-        assetId,
-      },
+      geometry,
       transform: {
         positionMm: [
           (centerX - sourceSize.width / 2) * mmPerPixel,
@@ -401,13 +566,32 @@ export async function buildReconstructionGraphAssembly({
       fidelity: depthDocumented ? "measured" : "estimated",
       evidence: {
         presence: [photoEvidenceId],
-        outline: [maskEvidenceId],
-        dimensions: dimensionEvidence,
-        depth: depthDocumented ? dimensionEvidence : [],
+        outline: [
+          maskEvidenceId,
+          ...(geometryEvidenceId ? [geometryEvidenceId] : []),
+        ],
+        dimensions: [
+          ...dimensionEvidence,
+          ...(geometryEvidenceId ? [geometryEvidenceId] : []),
+        ],
+        depth: [
+          ...(depthDocumented ? dimensionEvidence : []),
+          ...(geometryEvidenceId ? [geometryEvidenceId] : []),
+        ],
         transform: transformEvidence,
         material: [],
       },
       assumptions: [
+        ...(geometryCorrection
+          ? [
+              {
+                id: `assumption:${part.item.id}:canonical-geometry`,
+                property: "outline" as const,
+                reason: geometryCorrection.rationale,
+                impact: "mechanical" as const,
+              },
+            ]
+          : []),
         ...(!depthDocumented
           ? [
               {
@@ -438,7 +622,7 @@ export async function buildReconstructionGraphAssembly({
     schemaVersion: 1,
     id: `graph-${projectId}-${createdAt}`,
     projectId,
-    label: `${label} · Meta local reconstruction`,
+    label: `${label} - Meta local reconstruction`,
     units: "mm",
     coordinateSystem: "right-handed-y-up",
     createdAt,
@@ -457,6 +641,7 @@ export async function buildReconstructionGraphAssembly({
     })),
   });
   const assets = await generateGraphAssets(graph);
+  if (primaryCad) assets.push(primaryCad.asset);
 
   return { graph, manifest: compileReconstructionGraph(graph, assets) };
 }

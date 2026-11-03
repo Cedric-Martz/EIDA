@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { analyzeCadArtifact, cadFormatFromUrl } from "./cad-evidence";
 
@@ -39,6 +41,30 @@ describe("CAD evidence analysis", () => {
       },
     });
     expect(analysis.sha256).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("uses published component bounds for the bundled official battery STEP", () => {
+    const body = readFileSync(
+      resolve(
+        process.cwd(),
+        "public/demo/framework-laptop-13/framework-battery.step",
+      ),
+    );
+
+    const analysis = analyzeCadArtifact({
+      body,
+      url: "https://example.com/framework-battery.step",
+      mediaType: "application/step",
+    });
+
+    expect(analysis).toMatchObject({
+      status: "parsed",
+      format: "step",
+      unit: "mm",
+      confidence: 0.74,
+      boundsMm: { dimensions: [239, 93, 6] },
+    });
+    expect(analysis.warnings.join(" ")).toContain("component CAD");
   });
 
   it("uses declared DXF extents and converts inches to millimetres", () => {
@@ -88,13 +114,46 @@ describe("CAD evidence analysis", () => {
     });
   });
 
-  it("fingerprints unsupported CAD without claiming parsed geometry", () => {
+  it("extracts bounds from ASCII STL while preserving unknown units", () => {
     const analysis = analyzeCadArtifact({
-      body: Buffer.from("solid fixture\nendsolid fixture"),
+      body: Buffer.from(`solid fixture
+        facet normal 0 0 1
+          outer loop
+            vertex 0 0 0
+            vertex 120 0 0
+            vertex 0 60 8
+          endloop
+        endfacet
+      endsolid fixture`),
       url: "https://example.com/fixture.stl",
     });
 
-    expect(analysis.status).toBe("unsupported");
-    expect(analysis.boundsMm).toBeUndefined();
+    expect(analysis).toMatchObject({
+      status: "parsed",
+      format: "stl",
+      unit: "unknown",
+      boundsMm: { dimensions: [120, 60, 8] },
+    });
+  });
+
+  it("uses glTF metre accessor bounds", () => {
+    const analysis = analyzeCadArtifact({
+      body: Buffer.from(
+        JSON.stringify({
+          accessors: [
+            { min: [-0.06, -0.03, 0], max: [0.06, 0.03, 0.008], count: 24 },
+          ],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+        }),
+      ),
+      url: "https://example.com/device.gltf",
+    });
+    expect(analysis).toMatchObject({
+      status: "parsed",
+      format: "gltf",
+      unit: "m",
+      pointCount: 24,
+      boundsMm: { dimensions: [120, 60, 8] },
+    });
   });
 });

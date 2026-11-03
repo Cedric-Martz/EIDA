@@ -19,6 +19,10 @@ import {
 import { resolvePhotoObservations } from "@/domain/evidence/resolve-photo-observations";
 import { inferenceRunSchema, type InferenceRun } from "@/domain/inference/run";
 import { demoAssemblyManifest } from "@/domain/reconstruction/demo-assembly";
+import {
+  demoPhotoForEvidence,
+  demoReferenceAssets,
+} from "@/domain/reconstruction/demo-assets";
 import { demoProject } from "@/domain/reconstruction/demo-project";
 import {
   compileReconstructionGraph,
@@ -33,11 +37,18 @@ import {
 } from "@/domain/research";
 import { SourceManager } from "@/features/research/source-manager";
 import { sourceMatchesDevice } from "@/features/research/device-match";
-import { generateGraphAssets } from "@/features/local-reconstruction/silhouette-geometry";
+import {
+  boundRoundedBoxRadius,
+  generateGraphAssets,
+} from "@/features/local-reconstruction/silhouette-geometry";
 import { DeviceSetup } from "@/features/workspace/device-setup";
 import { ProjectWorkflow } from "@/features/workspace/project-workflow";
 import { db } from "@/storage/indexed-db/db";
-import { DeviceViewer, type SceneMode } from "./device-viewer";
+import {
+  DeviceViewer,
+  type CameraViewPreset,
+  type SceneMode,
+} from "./device-viewer";
 import { EvidenceBadge, EvidenceLegend } from "./evidence-badge";
 import { ExplodeSlider } from "./explode-slider";
 import { ViewerToolbar, type Tool } from "./viewer-toolbar";
@@ -61,12 +72,20 @@ export function ViewerPanel({
   initialViewSource?: "project" | "demo";
   onExit: () => void;
 }) {
-  const [explode, setExplode] = useState(0.58);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [explode, setExplode] = useState(
+    initialViewSource === "demo" ? 1 : 0.58,
+  );
+  const [selected, setSelected] = useState<string | null>(
+    initialViewSource === "demo" ? "battery" : null,
+  );
   const [isolated, setIsolated] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
-  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(
+    initialViewSource === "demo",
+  );
+  const [evidenceOpen, setEvidenceOpen] = useState(
+    initialViewSource === "demo",
+  );
   const [showGrid, setShowGrid] = useState(true);
   const [reducedGraphics, setReducedGraphics] = useState(false);
   const [resetKey, setResetKey] = useState(0);
@@ -97,8 +116,13 @@ export function ViewerPanel({
   );
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupError, setSetupError] = useState("");
-  const [restoringProject, setRestoringProject] = useState(true);
-  const [sceneMode, setSceneMode] = useState<SceneMode>("bench");
+  const [restoringProject, setRestoringProject] = useState(
+    initialViewSource !== "demo",
+  );
+  const [sceneMode, setSceneMode] = useState<SceneMode>(
+    initialViewSource === "demo" ? "exploded" : "bench",
+  );
+  const [cameraView, setCameraView] = useState<CameraViewPreset>("isometric");
   const [arrangeKey, setArrangeKey] = useState(0);
   const resolvedProject = activeRun?.resolvedProject ?? null;
   const project: Project =
@@ -110,6 +134,10 @@ export function ViewerPanel({
         emptyProject({ confirmedByUser: false }));
   const isDemo = viewSource === "demo";
   const activeAssembly = isDemo ? demoAssemblyManifest : assemblyManifest;
+  // Project diagnostics are restored asynchronously from IndexedDB. They must
+  // never leak into the curated reference demo, whose part IDs and graph are
+  // unrelated to the user's latest reconstruction.
+  const activeDiagnostics = isDemo ? [] : assemblyDiagnostics;
   const hasReconstructedMeshes = Boolean(
     activeAssembly?.parts.some((part) => part.geometry.kind === "asset"),
   );
@@ -260,8 +288,10 @@ export function ViewerPanel({
                   evidence: contextProject.evidence,
                 }),
               );
-              setSceneMode("assembled");
-              setPartsOpen(true);
+              if (initialViewSource !== "demo") {
+                setSceneMode("assembled");
+                setPartsOpen(true);
+              }
             } catch {
               // A stale assembly never replaces a valid evidence project.
             }
@@ -334,16 +364,41 @@ export function ViewerPanel({
   function selectComponent(id: string) {
     setSelected(id || null);
     setInspectorOpen(Boolean(id));
+    setDiagnosticsOpen(false);
+    if (id && window.matchMedia("(max-width: 1100px)").matches) {
+      setPartsOpen(false);
+    }
     setHighlightedPartIds([]);
     if (!id) setIsolated(false);
   }
 
   function handleTool(tool: Tool) {
-    if (tool === "parts") setPartsOpen((value) => !value);
-    if (tool === "inspect") setInspectorOpen((value) => !value);
+    const compact = window.matchMedia("(max-width: 1100px)").matches;
+    if (tool === "parts") {
+      const next = !partsOpen;
+      setPartsOpen(next);
+      if (next && compact) {
+        setInspectorOpen(false);
+        setEvidenceOpen(false);
+        setDiagnosticsOpen(false);
+      }
+    }
+    if (tool === "inspect") {
+      const next = !inspectorOpen;
+      setInspectorOpen(next);
+      if (!next) setEvidenceOpen(false);
+      if (next) {
+        setDiagnosticsOpen(false);
+        if (compact) setPartsOpen(false);
+      }
+    }
     if (tool === "evidence") {
       setEvidenceOpen((value) => {
-        if (!value) setInspectorOpen(true);
+        if (!value) {
+          setInspectorOpen(true);
+          setDiagnosticsOpen(false);
+          if (compact) setPartsOpen(false);
+        }
         return !value;
       });
     }
@@ -357,6 +412,7 @@ export function ViewerPanel({
       setInspectorOpen(false);
       setPartsOpen(false);
       setSceneMode("bench");
+      setCameraView("isometric");
       setHighlightedPartIds([]);
     }
   }
@@ -364,6 +420,24 @@ export function ViewerPanel({
   function openEvidence() {
     setEvidenceOpen(true);
     setInspectorOpen(true);
+    setDiagnosticsOpen(false);
+    if (window.matchMedia("(max-width: 1100px)").matches) setPartsOpen(false);
+  }
+
+  function toggleDiagnostics() {
+    const next = !diagnosticsOpen;
+    setDiagnosticsOpen(next);
+    if (next) {
+      setInspectorOpen(false);
+      setEvidenceOpen(false);
+      if (window.matchMedia("(max-width: 1100px)").matches) setPartsOpen(false);
+    }
+  }
+
+  function cycleCameraView() {
+    const order: CameraViewPreset[] = ["isometric", "front", "top", "side"];
+    const current = order.indexOf(cameraView);
+    setCameraView(order[(current + 1) % order.length]!);
   }
 
   function arrangeOnWorkbench() {
@@ -387,9 +461,14 @@ export function ViewerPanel({
 
   function showProject(nextSource: "project" | "demo") {
     setViewSource(nextSource);
-    setSelected(null);
+    setSelected(nextSource === "demo" ? "battery" : null);
     setIsolated(false);
-    setSceneMode("bench");
+    setExplode(nextSource === "demo" ? 1 : 0.58);
+    setSceneMode(nextSource === "demo" ? "exploded" : "bench");
+    setInspectorOpen(nextSource === "demo");
+    setEvidenceOpen(nextSource === "demo");
+    setDiagnosticsOpen(false);
+    setHighlightedPartIds([]);
     setArrangeKey((value) => value + 1);
   }
 
@@ -648,7 +727,7 @@ export function ViewerPanel({
   }
 
   const projectTitle = isDemo
-    ? "Synthetic demonstration"
+    ? "Framework Laptop 13 reference demo"
     : [project.device.manufacturer, project.device.model]
         .filter(Boolean)
         .join(" ") || "Unidentified device";
@@ -662,7 +741,15 @@ export function ViewerPanel({
 
   return (
     <section
-      className={`viewer-workbench ${reducedGraphics ? "is-reduced" : ""}`}
+      className={[
+        "viewer-workbench",
+        reducedGraphics ? "is-reduced" : "",
+        partsOpen ? "has-parts-panel" : "",
+        inspectorOpen ? "has-inspector-panel" : "",
+        diagnosticsOpen ? "has-diagnostics-panel" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       aria-labelledby="viewer-title"
     >
       <header className="viewer-topbar">
@@ -681,7 +768,7 @@ export function ViewerPanel({
           </strong>
           <small>
             {isDemo
-              ? "training fixture"
+              ? "licensed evidence + official CAD"
               : project.device.confirmedByUser
                 ? "identity confirmed by user"
                 : "identity unconfirmed"}
@@ -715,7 +802,7 @@ export function ViewerPanel({
               </button>
               {!isDemo && (
                 <button type="button" onClick={() => showProject("demo")}>
-                  Open synthetic demo
+                  Open reference demo
                 </button>
               )}
               {isDemo && baseProject && (
@@ -723,7 +810,6 @@ export function ViewerPanel({
                   Return to my project
                 </button>
               )}
-              <span className="viewer-menu__section">Navigation 3D</span>
               <span className="viewer-menu__help">
                 Drag to rotate | two fingers to pan | pinch to zoom | keyboard
                 controls available
@@ -744,6 +830,7 @@ export function ViewerPanel({
         showGrid={showGrid}
         reducedGraphics={reducedGraphics}
         resetKey={resetKey}
+        cameraView={cameraView}
         warningPartIds={highlightedPartIds}
         onSelect={selectComponent}
         onReady={() => setSceneReady(true)}
@@ -767,9 +854,9 @@ export function ViewerPanel({
         <div>
           <span className="scene-status__path">
             {isDemo
-              ? "Synthetic demo fixture"
+              ? "Evidence-backed reference demo"
               : assemblyProject
-                ? `${hasReconstructedMeshes ? "Meta reconstructed meshes" : "Estimated assembly"} · ${assemblyDiagnostics.length} spatial warning${assemblyDiagnostics.length === 1 ? "" : "s"}`
+                ? `${hasReconstructedMeshes ? "Meta reconstructed meshes" : "Estimated assembly"} - ${activeDiagnostics.length} spatial warning${activeDiagnostics.length === 1 ? "" : "s"}`
                 : resolvedProject
                   ? "Evidence-resolved project"
                   : "Evidence project"}
@@ -785,7 +872,7 @@ export function ViewerPanel({
           </h2>
         </div>
         <div className="scene-mode-actions" aria-label="Part arrangement">
-          {assemblyDiagnostics.length > 0 && (
+          {activeDiagnostics.length > 0 && (
             <button
               type="button"
               className={
@@ -793,10 +880,10 @@ export function ViewerPanel({
                   ? "is-active diagnostics-trigger"
                   : "diagnostics-trigger"
               }
-              onClick={() => setDiagnosticsOpen((value) => !value)}
+              onClick={toggleDiagnostics}
             >
               <EidaIcon name="alert" size={16} />
-              <small>{assemblyDiagnostics.length} issues</small>
+              <small>{activeDiagnostics.length} issues</small>
             </button>
           )}
           <button
@@ -828,6 +915,14 @@ export function ViewerPanel({
           </button>
           <button
             type="button"
+            onClick={cycleCameraView}
+            title={`Camera view: ${cameraView}. Click for the next view.`}
+          >
+            <EidaIcon name="camera" size={17} />
+            <small>{cameraView}</small>
+          </button>
+          <button
+            type="button"
             onClick={() => setResetKey((value) => value + 1)}
             disabled={project.components.length === 0}
           >
@@ -837,7 +932,7 @@ export function ViewerPanel({
         </div>
       </GlassPanel>
 
-      {diagnosticsOpen && assemblyDiagnostics.length > 0 && (
+      {diagnosticsOpen && activeDiagnostics.length > 0 && (
         <GlassPanel
           className="diagnostics-panel"
           reducedGraphics={reducedGraphics}
@@ -861,7 +956,7 @@ export function ViewerPanel({
             graph properties.
           </p>
           <ol className="diagnostics-list">
-            {assemblyDiagnostics.map((diagnostic, index) => (
+            {activeDiagnostics.map((diagnostic, index) => (
               <li
                 key={`${diagnostic.code}:${diagnostic.partIds.join(":")}:${index}`}
               >
@@ -900,7 +995,14 @@ export function ViewerPanel({
               <span className="panel-kicker">Structure</span>
               <h3>Components</h3>
             </div>
-            <span>{project.components.length}</span>
+            <button
+              type="button"
+              className="panel-close"
+              onClick={() => setPartsOpen(false)}
+              aria-label="Close components"
+            >
+              <EidaIcon name="close" size={15} />
+            </button>
           </div>
           <ol className="parts-list">
             {project.components.map((item, index) => {
@@ -978,7 +1080,10 @@ export function ViewerPanel({
             <button
               type="button"
               className="panel-close"
-              onClick={() => setInspectorOpen(false)}
+              onClick={() => {
+                setInspectorOpen(false);
+                setEvidenceOpen(false);
+              }}
               aria-label="Close inspector"
             >
               <EidaIcon name="close" size={15} />
@@ -997,9 +1102,11 @@ export function ViewerPanel({
                   <strong>
                     {component.geometry.kind === "placeholder"
                       ? "Indicative volume"
-                      : component.geometry.estimated
-                        ? "Estimated parametric"
-                        : "Measured parametric"}
+                      : component.geometry.kind === "reference_asset"
+                        ? "Official CAD envelope"
+                        : component.geometry.estimated
+                          ? "Estimated parametric"
+                          : "Measured parametric"}
                   </strong>
                 </div>
                 <div>
@@ -1031,7 +1138,7 @@ export function ViewerPanel({
                     <small>{graphCompiling ? "Compiling…" : "Live"}</small>
                   </div>
                   <fieldset disabled={graphCompiling}>
-                    <legend>Position · mm</legend>
+                    <legend>Position - mm</legend>
                     <div className="graph-vector-fields">
                       {(["X", "Y", "Z"] as const).map((axis, index) => (
                         <label
@@ -1063,7 +1170,7 @@ export function ViewerPanel({
                   </fieldset>
                   {graphPart.geometry.kind !== "mesh-reference" && (
                     <fieldset disabled={graphCompiling}>
-                      <legend>Dimensions · mm</legend>
+                      <legend>Dimensions - mm</legend>
                       <div className="graph-vector-fields">
                         {(["W", "H", "D"] as const).map((axis, index) => {
                           const value =
@@ -1089,17 +1196,29 @@ export function ViewerPanel({
                                     return;
                                   void updateGraphPart(graphPart.id, (part) => {
                                     if (part.geometry.kind === "primitive") {
+                                      const dimensionsMm =
+                                        part.geometry.dimensionsMm.map(
+                                          (current, currentIndex) =>
+                                            currentIndex === index
+                                              ? nextValue
+                                              : current,
+                                        ) as [number, number, number];
                                       return {
                                         ...part,
                                         geometry: {
                                           ...part.geometry,
-                                          dimensionsMm:
-                                            part.geometry.dimensionsMm.map(
-                                              (current, currentIndex) =>
-                                                currentIndex === index
-                                                  ? nextValue
-                                                  : current,
-                                            ) as [number, number, number],
+                                          dimensionsMm,
+                                          ...(part.geometry.primitive ===
+                                          "rounded_box"
+                                            ? {
+                                                cornerRadiusMm:
+                                                  boundRoundedBoxRadius(
+                                                    part.geometry
+                                                      .cornerRadiusMm,
+                                                    dimensionsMm,
+                                                  ),
+                                              }
+                                            : {}),
                                         },
                                       };
                                     }
@@ -1208,10 +1327,50 @@ export function ViewerPanel({
                 <span>Legend</span>
               </div>
               <EvidenceLegend />
-              {isDemo ? (
-                <p>Demo scene with no linked evidence.</p>
-              ) : componentEvidence.length > 0 || graphEvidence.length > 0 ? (
+              {componentEvidence.length > 0 || graphEvidence.length > 0 ? (
                 <>
+                  {isDemo && (
+                    <div className="demo-evidence-assets">
+                      {componentEvidence.flatMap((item) => {
+                        const photo = demoPhotoForEvidence(item.id);
+                        return photo ? (
+                          <a
+                            href={photo.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            key={photo.evidenceId}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={photo.src} alt={photo.alt} />
+                            <span>
+                              {photo.author} · {photo.license}
+                            </span>
+                          </a>
+                        ) : (
+                          []
+                        );
+                      })}
+                      {componentEvidence.some(
+                        (item) =>
+                          item.id === demoReferenceAssets.cad.evidenceId,
+                      ) && (
+                        <a
+                          className="demo-cad-download"
+                          href={demoReferenceAssets.cad.downloadUrl}
+                          download
+                        >
+                          <EidaIcon name="paper" size={18} />
+                          <span>
+                            Download official battery STEP
+                            <small>
+                              {demoReferenceAssets.cad.author} ·{" "}
+                              {demoReferenceAssets.cad.license}
+                            </small>
+                          </span>
+                        </a>
+                      )}
+                    </div>
+                  )}
                   <ul className="evidence-source-list">
                     {graphEvidence.map((item) => (
                       <li key={item.id}>
@@ -1228,7 +1387,17 @@ export function ViewerPanel({
                       <li key={item.id}>
                         <strong>{item.kind}</strong>
                         <span>{item.description}</span>
-                        <small>{item.locator ?? item.sourceId}</small>
+                        {item.sourceId.startsWith("https://") ? (
+                          <a
+                            href={item.sourceId}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open source
+                          </a>
+                        ) : (
+                          <small>{item.locator ?? item.sourceId}</small>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -1295,6 +1464,10 @@ export function ViewerPanel({
           onManageSources={() => {
             setSourcesOpen(true);
           }}
+          onOpenDemo={() => {
+            setWorkflowOpen(false);
+            showProject("demo");
+          }}
           onApplyManifest={applyAssemblyManifest}
           onClose={() => setWorkflowOpen(false)}
         />
@@ -1313,7 +1486,7 @@ export function ViewerPanel({
           onKnownDevice={chooseKnownDevice}
           onUnknownDevice={chooseUnknownDevice}
           onOpenDemo={() => {
-            setViewSource("demo");
+            showProject("demo");
             setSetupOpen(false);
           }}
         />
@@ -1355,7 +1528,7 @@ export function ViewerPanel({
                 <strong>{observation.label}</strong>
                 <span>{observation.description}</span>
                 <small>
-                  {observation.visibility} · photo{" "}
+                  {observation.visibility} - photo{" "}
                   {observation.evidencePhotoIndices.join(", ")}
                 </small>
               </li>

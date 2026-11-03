@@ -180,7 +180,7 @@ export function AssemblyImport({
           </p>
         </div>
         <span className={styles.format} aria-label="Accepted format: JSON">
-          JSON · EIDA v1
+          JSON - EIDA v1
         </span>
       </div>
 
@@ -225,7 +225,7 @@ export function AssemblyImport({
             <strong>Manifest validated</strong>
             <span>
               {state.manifest.parts.length} part
-              {state.manifest.parts.length === 1 ? "" : "s"} ·{" "}
+              {state.manifest.parts.length === 1 ? "" : "s"} -{" "}
               {state.diagnostics.length} spatial warning
               {state.diagnostics.length === 1 ? "" : "s"}
             </span>

@@ -28,6 +28,8 @@ export function ViewerToolbar({
           aria-pressed={
             tool.id === "reset" ? undefined : activeTools.includes(tool.id)
           }
+          aria-label={tool.label}
+          title={tool.label}
           onClick={() => onAction(tool.id)}
         >
           <EidaIcon name={tool.icon} size={18} />

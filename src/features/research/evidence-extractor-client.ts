@@ -14,7 +14,7 @@ export async function extractApprovedSources(
     cache: "no-store",
     signal,
     body: JSON.stringify({
-      sources: sources.slice(0, 10).map(({ id, url, title, sourceType }) => ({
+      sources: sources.slice(0, 20).map(({ id, url, title, sourceType }) => ({
         id,
         url,
         title,

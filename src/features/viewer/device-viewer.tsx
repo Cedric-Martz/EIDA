@@ -18,6 +18,7 @@ import {
   useGLTF,
 } from "@react-three/drei";
 import {
+  ACESFilmicToneMapping,
   Color,
   DoubleSide,
   Euler,
@@ -27,7 +28,9 @@ import {
   Matrix4,
   Mesh,
   Plane,
+  PCFSoftShadowMap,
   Quaternion,
+  SRGBColorSpace,
   Vector2,
   Vector3,
 } from "three";
@@ -44,6 +47,7 @@ import type { ComponentNode } from "@/domain/evidence/schema";
 import { explodedPosition } from "@/domain/reconstruction/explode";
 
 export type SceneMode = "bench" | "exploded" | "assembled";
+export type CameraViewPreset = "isometric" | "front" | "top" | "side";
 
 const WORKBENCH_Y = -1.34;
 const SCENE_SCALE = 0.011;
@@ -79,6 +83,31 @@ const physicalOffsets: Record<string, readonly [number, number]> = {
   battery: [0.32, -0.16],
   camera: [0.96, 0.64],
 };
+
+const DEMO_ASSEMBLY_ID = "framework-laptop-13-reference-assembly";
+const keyboardKeys = Array.from({ length: 60 }, (_, index) => ({
+  x: ((index % 12) - 5.5) * 0.19,
+  y: 0.7 - Math.floor(index / 12) * 0.19,
+}));
+const boardComponents = [
+  [-0.78, -0.18, 0.12, 0.1],
+  [-0.57, -0.2, 0.16, 0.08],
+  [-0.31, -0.19, 0.11, 0.11],
+  [0.02, -0.2, 0.24, 0.07],
+  [0.39, -0.18, 0.13, 0.1],
+  [0.68, -0.17, 0.18, 0.08],
+  [0.87, 0.18, 0.1, 0.13],
+  [0.62, 0.2, 0.14, 0.09],
+] as const;
+const coverScrews = [
+  [-1.43, -1.08],
+  [1.43, -1.08],
+  [-1.43, 1.08],
+  [1.43, 1.08],
+  [0, -1.08],
+] as const;
+const ventSlots = Array.from({ length: 15 }, (_, index) => (index - 7) * 0.14);
+const fanBlades = Array.from({ length: 11 }, (_, index) => index);
 
 function sceneTransformFromMatrix(
   worldMatrix: readonly number[],
@@ -196,8 +225,14 @@ function StudioLighting({ reducedGraphics }: { reducedGraphics: boolean }) {
         position={[4, 7, 5]}
         color="#fff8e8"
         intensity={2.15}
-        shadow-mapSize={[1024, 1024]}
+        shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.00008}
+        shadow-normalBias={0.018}
+        shadow-radius={3}
+        shadow-camera-left={-6}
+        shadow-camera-right={6}
+        shadow-camera-top={6}
+        shadow-camera-bottom={-6}
       />
       <directionalLight
         position={[-4, 2, 3]}
@@ -207,8 +242,8 @@ function StudioLighting({ reducedGraphics }: { reducedGraphics: boolean }) {
       <Environment
         background={false}
         frames={1}
-        resolution={256}
-        environmentIntensity={0.78}
+        resolution={512}
+        environmentIntensity={0.86}
       >
         <Lightformer
           form="rect"
@@ -312,51 +347,226 @@ function PartSurfaceMaterial({
 function PartDetails({
   component,
   depth,
+  enabled,
 }: {
   component: ComponentNode;
   depth: number;
+  enabled: boolean;
 }) {
-  // Decorative details belong only to the explicitly synthetic fixture. Live
-  // evidence-derived components stay primitive and never gain imagined internals.
+  // Decorative details belong only to the curated reference demo. Live
+  // evidence-derived components never gain imagined internals.
+  if (!enabled) return null;
+
   if (component.id === "board") {
     return (
       <group position={[0, 0, depth / 2 + 0.018]}>
-        <mesh position={[-0.18, 0.09, 0]}>
-          <boxGeometry args={[0.22, 0.18, 0.025]} />
+        <mesh position={[-0.31, 0.08, 0.025]}>
+          <boxGeometry args={[0.3, 0.28, 0.05]} />
           <meshStandardMaterial color="#172328" roughness={0.55} />
         </mesh>
-        <mesh position={[0.2, -0.12, 0]}>
-          <boxGeometry args={[0.15, 0.12, 0.02]} />
+        <mesh position={[0.3, 0.11, 0.022]}>
+          <boxGeometry args={[0.52, 0.18, 0.044]} />
           <meshStandardMaterial
-            color="#9caeb1"
-            metalness={0.6}
-            roughness={0.4}
+            color="#1b2427"
+            metalness={0.35}
+            roughness={0.5}
           />
         </mesh>
-        <mesh position={[0.29, 0.16, 0]}>
-          <boxGeometry args={[0.08, 0.08, 0.02]} />
-          <meshStandardMaterial color="#c8a85c" metalness={0.55} />
+        <mesh position={[-0.02, 0.27, 0.04]} rotation={[0, 0, -0.08]}>
+          <boxGeometry args={[1.22, 0.075, 0.055]} />
+          <meshStandardMaterial
+            color="#b87333"
+            metalness={0.78}
+            roughness={0.3}
+          />
         </mesh>
+        {boardComponents.map(([x, y, width, height], index) => (
+          <mesh key={index} position={[x, y, 0.018]}>
+            <boxGeometry args={[width, height, 0.036]} />
+            <meshStandardMaterial
+              color={index % 3 === 0 ? "#c2a25e" : "#293237"}
+              metalness={index % 3 === 0 ? 0.58 : 0.22}
+              roughness={0.5}
+            />
+          </mesh>
+        ))}
+        {[-0.92, -0.7, 0.72, 0.92].map((x) => (
+          <mesh key={x} position={[x, 0.36, 0.035]}>
+            <boxGeometry args={[0.15, 0.08, 0.07]} />
+            <meshStandardMaterial
+              color="#aeb8b9"
+              metalness={0.82}
+              roughness={0.28}
+            />
+          </mesh>
+        ))}
       </group>
     );
   }
 
   if (component.id === "screen") {
     return (
-      <mesh position={[0, 0, depth / 2 + 0.012]}>
-        <planeGeometry args={[2.48, 1.67]} />
-        <meshPhysicalMaterial
-          color="#304751"
-          metalness={0.12}
-          roughness={0.14}
-          clearcoat={0.8}
-          clearcoatRoughness={0.18}
-        />
-      </mesh>
+      <group position={[0, 0, depth / 2 + 0.012]}>
+        <mesh>
+          <planeGeometry args={[2.75, 1.78]} />
+          <meshPhysicalMaterial
+            color="#142a31"
+            metalness={0.12}
+            roughness={0.14}
+            clearcoat={0.8}
+            clearcoatRoughness={0.18}
+          />
+        </mesh>
+        <mesh position={[0, 0.94, 0.009]}>
+          <circleGeometry args={[0.025, 20]} />
+          <meshStandardMaterial color="#0a0f11" metalness={0.5} />
+        </mesh>
+        <mesh position={[0, -0.97, 0.009]}>
+          <boxGeometry args={[0.24, 0.018, 0.01]} />
+          <meshStandardMaterial color="#9ea8a9" metalness={0.6} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (component.id === "input-cover") {
+    return (
+      <group position={[0, 0, depth / 2 + 0.012]}>
+        <mesh position={[0, 0.34, 0]}>
+          <planeGeometry args={[2.5, 1.15]} />
+          <meshStandardMaterial color="#20272a" roughness={0.72} />
+        </mesh>
+        {keyboardKeys.map((key, index) => (
+          <mesh key={index} position={[key.x, key.y, 0.008]}>
+            <boxGeometry args={[0.16, 0.135, 0.022]} />
+            <meshStandardMaterial color="#30383b" roughness={0.68} />
+          </mesh>
+        ))}
+        <mesh position={[0, -0.57, 0.004]}>
+          <planeGeometry args={[1.14, 0.64]} />
+          <meshStandardMaterial
+            color="#bfc2bf"
+            metalness={0.42}
+            roughness={0.38}
+          />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (component.id === "battery") {
+    return (
+      <group position={[0, 0, depth / 2 + 0.012]}>
+        {[-0.82, 0, 0.82].map((x) => (
+          <mesh key={x} position={[x, 0, 0.008]}>
+            <boxGeometry args={[0.74, 0.84, 0.018]} />
+            <meshStandardMaterial
+              color="#485156"
+              metalness={0.52}
+              roughness={0.42}
+            />
+          </mesh>
+        ))}
+        <mesh position={[0, -0.02, 0.025]}>
+          <planeGeometry args={[0.72, 0.42]} />
+          <meshStandardMaterial color="#d7dad7" roughness={0.78} />
+        </mesh>
+        {[0.09, 0, -0.09].map((y) => (
+          <mesh key={y} position={[0, y, 0.032]}>
+            <boxGeometry args={[0.48, 0.012, 0.008]} />
+            <meshStandardMaterial color="#798184" />
+          </mesh>
+        ))}
+        <mesh position={[1.24, 0.22, 0.035]}>
+          <boxGeometry args={[0.16, 0.22, 0.07]} />
+          <meshStandardMaterial color="#c2a457" metalness={0.64} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (component.id === "speakers") {
+    return (
+      <group position={[0, 0, depth / 2 + 0.016]}>
+        {[-1.13, 1.13].map((x) => (
+          <group key={x} position={[x, 0, 0]}>
+            <mesh>
+              <boxGeometry args={[0.42, 0.25, 0.08]} />
+              <meshStandardMaterial color="#202629" roughness={0.62} />
+            </mesh>
+            {[-0.1, 0, 0.1].map((offset) => (
+              <mesh key={offset} position={[offset, 0, 0.045]}>
+                <circleGeometry args={[0.035, 14]} />
+                <meshStandardMaterial color="#778083" />
+              </mesh>
+            ))}
+          </group>
+        ))}
+        <mesh position={[0, 0, 0.012]}>
+          <boxGeometry args={[1.85, 0.035, 0.024]} />
+          <meshStandardMaterial color="#343c3f" />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (component.id === "bottom-cover") {
+    return (
+      <group position={[0, 0, depth / 2 + 0.012]}>
+        {ventSlots.map((x) => (
+          <mesh key={x} position={[x, 0.78, 0]}>
+            <boxGeometry args={[0.075, 0.42, 0.018]} />
+            <meshStandardMaterial color="#50585a" roughness={0.72} />
+          </mesh>
+        ))}
+        {coverScrews.map(([x, y]) => (
+          <mesh key={`${x}:${y}`} position={[x, y, 0.012]}>
+            <circleGeometry args={[0.035, 16]} />
+            <meshStandardMaterial
+              color="#697174"
+              metalness={0.72}
+              roughness={0.32}
+            />
+          </mesh>
+        ))}
+        <mesh position={[0, -0.32, 0.008]}>
+          <planeGeometry args={[0.78, 0.46]} />
+          <meshStandardMaterial color="#b4b7b4" roughness={0.7} />
+        </mesh>
+      </group>
     );
   }
 
   return null;
+}
+
+function FanDetails({ enabled, depth }: { enabled: boolean; depth: number }) {
+  if (!enabled) return null;
+  return (
+    <group position={[0, 0, depth / 2 + 0.012]}>
+      <mesh>
+        <ringGeometry args={[0.22, 0.34, 32]} />
+        <meshStandardMaterial color="#20272a" metalness={0.35} />
+      </mesh>
+      {fanBlades.map((index) => {
+        const angle = (index / fanBlades.length) * Math.PI * 2;
+        return (
+          <mesh
+            key={index}
+            position={[Math.cos(angle) * 0.16, Math.sin(angle) * 0.16, 0.012]}
+            rotation={[0, 0, angle + 0.55]}
+          >
+            <boxGeometry args={[0.23, 0.065, 0.022]} />
+            <meshStandardMaterial color="#3b4548" roughness={0.48} />
+          </mesh>
+        );
+      })}
+      <mesh position={[0, 0, 0.026]}>
+        <circleGeometry args={[0.09, 24]} />
+        <meshStandardMaterial color="#9ba4a5" metalness={0.55} />
+      </mesh>
+    </group>
+  );
 }
 
 function AssetPartMesh({
@@ -388,6 +598,7 @@ function AssetPartMesh({
 
 type DragState = {
   pointerId: number;
+  captureTarget: Element | null;
   offsetX: number;
   offsetZ: number;
 };
@@ -408,6 +619,7 @@ function Part({
   selected,
   isolated,
   warning,
+  referenceDetails,
   onSelect,
   onHoverChange,
   onDragChange,
@@ -427,6 +639,7 @@ function Part({
   selected: boolean;
   isolated: boolean;
   warning: boolean;
+  referenceDetails: boolean;
   onSelect: (id: string) => void;
   onHoverChange: (hovered: boolean) => void;
   onDragChange: (dragging: boolean) => void;
@@ -527,11 +740,25 @@ function Part({
     invalidate();
   }, [arrangeKey, invalidate]);
 
+  useEffect(() => {
+    if (mode === "bench" || !drag.current) return;
+
+    const activeDrag = drag.current;
+    if (activeDrag.captureTarget?.hasPointerCapture(activeDrag.pointerId)) {
+      activeDrag.captureTarget.releasePointerCapture(activeDrag.pointerId);
+    }
+    drag.current = null;
+    if (controls) controls.enabled = true;
+    onDragChange(false);
+    invalidate();
+  }, [controls, invalidate, mode, onDragChange]);
+
   useEffect(
     () => () => {
+      if (drag.current) onDragChange(false);
       if (controls) controls.enabled = true;
     },
-    [controls],
+    [controls, onDragChange],
   );
 
   useFrame((_, delta) => {
@@ -577,21 +804,31 @@ function Part({
   }
 
   function startDrag(event: ThreeEvent<PointerEvent>) {
-    event.stopPropagation();
     onSelect(component.id);
-    if (mode !== "bench") return;
+    const isPrimaryMove =
+      event.isPrimary && (event.pointerType !== "mouse" || event.button === 0);
+    if (mode !== "bench" || !isPrimaryMove) return;
+
+    event.stopPropagation();
 
     const point = pointOnWorkbench(event);
     const current = group.current;
     if (!point || !current) return;
 
+    // Fiber and OrbitControls listen to the same canvas pointer event. Prevent
+    // OrbitControls from also entering its rotate state for this pointer; just
+    // toggling `enabled` is too late when both handlers process pointerdown.
+    event.nativeEvent.stopImmediatePropagation();
+    event.nativeEvent.preventDefault();
+    const target = event.nativeEvent.target;
+    const captureTarget = target instanceof Element ? target : null;
     drag.current = {
       pointerId: event.pointerId,
+      captureTarget,
       offsetX: current.position.x - point.x,
       offsetZ: current.position.z - point.z,
     };
-    const target = event.nativeEvent.target;
-    if (target instanceof Element) target.setPointerCapture(event.pointerId);
+    captureTarget?.setPointerCapture(event.pointerId);
     if (controls) controls.enabled = false;
     onDragChange(true);
     invalidate();
@@ -611,14 +848,11 @@ function Part({
   }
 
   function stopDrag(event: ThreeEvent<PointerEvent>) {
-    if (!drag.current) return;
+    const activeDrag = drag.current;
+    if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
     event.stopPropagation();
-    const target = event.nativeEvent.target;
-    if (
-      target instanceof Element &&
-      target.hasPointerCapture(drag.current.pointerId)
-    ) {
-      target.releasePointerCapture(drag.current.pointerId);
+    if (activeDrag.captureTarget?.hasPointerCapture(activeDrag.pointerId)) {
+      activeDrag.captureTarget.releasePointerCapture(activeDrag.pointerId);
     }
     drag.current = null;
     if (controls) controls.enabled = true;
@@ -664,7 +898,7 @@ function Part({
             <RoundedBox
               args={[sceneWidth, sceneHeight, depth]}
               radius={Math.min(0.045, depth / 2.4)}
-              smoothness={3}
+              smoothness={5}
             >
               <meshStandardMaterial
                 color="#7f8b8f"
@@ -687,7 +921,7 @@ function Part({
                 Math.max(sceneWidth / 2, 0.04),
                 Math.max(sceneWidth / 2, 0.04),
                 depth,
-                28,
+                48,
               ]}
             />
             <PartSurfaceMaterial
@@ -701,6 +935,9 @@ function Part({
               reducedGraphics={reducedGraphics}
             />
           </mesh>
+          {component.id === "fan" && (
+            <FanDetails enabled={referenceDetails} depth={depth} />
+          )}
           {component.category === "camera" && (
             <mesh position={[0, 0, depth / 2 + 0.004]}>
               <circleGeometry args={[Math.max(sceneWidth * 0.3, 0.025), 28]} />
@@ -716,7 +953,7 @@ function Part({
         <RoundedBox
           args={[sceneWidth, sceneHeight, depth]}
           radius={Math.min(0.045, depth / 2.4)}
-          smoothness={3}
+          smoothness={5}
           castShadow
           receiveShadow
         >
@@ -742,7 +979,11 @@ function Part({
                     : "#7e8588"
             }
           />
-          <PartDetails component={component} depth={depth} />
+          <PartDetails
+            component={component}
+            depth={depth}
+            enabled={referenceDetails}
+          />
         </RoundedBox>
       )}
     </group>
@@ -754,12 +995,14 @@ function CameraControls({
   fitRadius,
   fitKey,
   resetKey,
+  viewPreset,
   enabled,
 }: {
   fitTarget: readonly [number, number, number];
   fitRadius: number;
   fitKey: string;
   resetKey: number;
+  viewPreset: CameraViewPreset;
   enabled: boolean;
 }) {
   const controls = useRef<OrbitControlsImpl>(null);
@@ -777,7 +1020,15 @@ function CameraControls({
       1.4,
       (fitRadius / Math.tan(MathUtils.degToRad(perspectiveFov) / 2)) * 1.35,
     );
-    const direction = new Vector3(1, 0.78, 1.18).normalize();
+    const direction =
+      viewPreset === "front"
+        ? new Vector3(0, 0.08, 1)
+        : viewPreset === "top"
+          ? new Vector3(0, 1, 0.3)
+          : viewPreset === "side"
+            ? new Vector3(1, 0.08, 0)
+            : new Vector3(1, 0.78, 1.18);
+    direction.normalize();
     orbit.target.copy(target);
     camera.position.copy(target).addScaledVector(direction, distance);
     camera.near = Math.max(0.01, distance / 200);
@@ -785,7 +1036,7 @@ function CameraControls({
     camera.updateProjectionMatrix();
     orbit.update();
     invalidate();
-  }, [camera, fitKey, fitRadius, fitTarget, invalidate, resetKey]);
+  }, [camera, fitKey, fitRadius, fitTarget, invalidate, resetKey, viewPreset]);
 
   useEffect(() => {
     function navigateWithKeyboard(event: KeyboardEvent) {
@@ -894,6 +1145,7 @@ export function DeviceViewer({
   showGrid,
   reducedGraphics,
   resetKey,
+  cameraView = "isometric",
   warningPartIds,
   interactive = true,
   onSelect,
@@ -909,6 +1161,7 @@ export function DeviceViewer({
   showGrid: boolean;
   reducedGraphics: boolean;
   resetKey: number;
+  cameraView?: CameraViewPreset;
   warningPartIds?: readonly string[];
   /** Disable pointer, wheel and keyboard controls for scroll-led presentation views. */
   interactive?: boolean;
@@ -1049,7 +1302,7 @@ export function DeviceViewer({
       );
       return {
         target: [0, -0.45, 0] as const,
-        radius: Math.max(2.1, Math.hypot(maxX, maxZ) + 1.15),
+        radius: Math.max(2.1, Math.hypot(maxX, maxZ) + 0.82),
       };
     }
 
@@ -1067,7 +1320,7 @@ export function DeviceViewer({
         target: center as readonly [number, number, number],
         radius: Math.max(
           1.1,
-          diagonal * SCENE_SCALE * 0.55 * (mode === "exploded" ? 1.6 : 1),
+          diagonal * SCENE_SCALE * 0.55 * (mode === "exploded" ? 1.38 : 1),
         ),
       };
     }
@@ -1107,12 +1360,18 @@ export function DeviceViewer({
     >
       <Canvas
         shadows={!reducedGraphics}
-        dpr={reducedGraphics ? 1 : [1, 1.5]}
+        dpr={reducedGraphics ? 1 : [1, 2]}
         frameloop="demand"
         performance={{ min: 0.6 }}
         camera={{ position: [5.9, 4.8, 8.6], fov: 44 }}
         onPointerMissed={interactive ? () => onSelect("") : undefined}
-        onCreated={onReady}
+        onCreated={({ gl }) => {
+          gl.outputColorSpace = SRGBColorSpace;
+          gl.toneMapping = ACESFilmicToneMapping;
+          gl.toneMappingExposure = 1.08;
+          gl.shadowMap.type = PCFSoftShadowMap;
+          onReady?.();
+        }}
       >
         <color attach="background" args={["#e8e5de"]} />
         <StudioLighting reducedGraphics={reducedGraphics} />
@@ -1145,6 +1404,7 @@ export function DeviceViewer({
               selected={selected === component.id}
               isolated={isolated}
               warning={warningIds.has(component.id)}
+              referenceDetails={assembly?.id === DEMO_ASSEMBLY_ID}
               onSelect={onSelect}
               onHoverChange={setPartHovered}
               onDragChange={setDragging}
@@ -1171,10 +1431,11 @@ export function DeviceViewer({
         {!reducedGraphics && (
           <ContactShadows
             position={[0, WORKBENCH_Y + 0.006, 0]}
-            opacity={0.2}
+            opacity={0.27}
             scale={13}
-            blur={1.8}
+            blur={2.25}
             far={6}
+            resolution={512}
           />
         )}
         <CameraControls
@@ -1182,6 +1443,7 @@ export function DeviceViewer({
           fitRadius={cameraFit.radius}
           fitKey={`${mode}:${arrangeKey}:${assembly?.id ?? "project"}:${isolated ? (selected ?? "none") : "all"}`}
           resetKey={resetKey}
+          viewPreset={cameraView}
           enabled={interactive && !dragging}
         />
       </Canvas>

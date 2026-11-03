@@ -488,7 +488,7 @@
 }
 
 .boundaryGrid li::before {
-  content: "·";
+  content: "-";
   position: absolute;
   left: 1px;
   color: #df5b39;

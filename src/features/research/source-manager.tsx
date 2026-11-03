@@ -60,6 +60,8 @@ type Notice = {
   message: string;
 };
 
+const AUTO_SELECT_LIMIT = 20;
+
 export type SourceManagerProps = {
   deviceLabel: string;
   query?: string;
@@ -298,7 +300,9 @@ export function SourceManager({
   const resolvedEndpoint = (
     researchEndpoint ??
     process.env.NEXT_PUBLIC_EIDA_RESEARCH_API ??
-    ""
+    (process.env.NEXT_PUBLIC_STATIC_SHOWCASE === "true"
+      ? ""
+      : "/api/research/search")
   ).trim();
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [searchStatus, setSearchStatus] = useState<
@@ -410,7 +414,12 @@ export function SourceManager({
         const incompatibleCount =
           unfilteredSources.length - foundSources.length;
         const previousSources = sourcesRef.current;
-        const nextSources = mergeSearchResults(previousSources, foundSources);
+        let nextSources = mergeSearchResults(previousSources, foundSources);
+        const automaticallySelected = foundSources.slice(0, AUTO_SELECT_LIMIT);
+        const selectedAt = Date.now();
+        for (const source of automaticallySelected) {
+          nextSources = selectSource(nextSources, source.id, selectedAt);
+        }
         const addedCount = nextSources.length - previousSources.length;
         commitSources(nextSources);
 
@@ -421,11 +430,11 @@ export function SourceManager({
           foundSources.length > 0
             ? {
                 tone: "success",
-                message: `${foundSources.length} result${foundSources.length === 1 ? "" : "s"} returned by ${providerNames}; ${addedCount} new source${addedCount === 1 ? "" : "s"} added.`,
+                message: `${foundSources.length} result${foundSources.length === 1 ? "" : "s"} returned by ${providerNames}; ${addedCount} new source${addedCount === 1 ? "" : "s"} added and up to ${automaticallySelected.length} enabled by default. Remove or unapprove false positives before reconstruction.`,
               }
             : {
                 tone: "info",
-                message: `No source matched “${normalizedQuery}”. Try the exact model number or add a link manually.`,
+                message: `No source matched “${normalizedQuery}”. Try combining the commercial name and model number, or add a link manually.`,
               },
         ];
 
@@ -622,7 +631,7 @@ export function SourceManager({
       >
         <header className={styles.header}>
           <div>
-            <p className={styles.eyebrow}>01 · Source research</p>
+            <p className={styles.eyebrow}>01 - Source research</p>
             <h2 id={titleId}>Build an evidence set</h2>
             <p id={descriptionId}>
               Find plans, guides and technical references for{" "}
@@ -647,12 +656,12 @@ export function SourceManager({
               <div>
                 <strong>
                   {resolvedEndpoint
-                    ? "Multi-provider research service"
-                    : "Static demo · direct iFixit search"}
+                    ? "General web and technical-document search"
+                    : "Static demo - direct iFixit search"}
                 </strong>
                 <small>
                   {resolvedEndpoint
-                    ? "The endpoint searches iFixit plus targeted manuals, FCC records, GitHub hardware and CAD libraries. No secret is stored in this page."
+                    ? "Searches iFixit and the live web for manuals, internal photos, specifications, technical drawings and downloadable CAD/3D files. Matching results are enabled by default for review."
                     : "GitHub Pages calls iFixit's public API directly. General web search becomes available when a research endpoint is configured."}
                 </small>
               </div>
@@ -666,7 +675,7 @@ export function SourceManager({
                   id={searchInputId}
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="e.g. Samsung Galaxy Tab 4 SM-T530"
+                  placeholder="e.g. Samsung Galaxy Tab 4 10.1 SM-T530"
                   maxLength={200}
                   autoComplete="off"
                 />
@@ -813,7 +822,7 @@ export function SourceManager({
                 <span className={styles.sectionNumber}>D</span>
                 <div>
                   <h3 id={`${titleId}-discovered`}>
-                    Discovered · needs review
+                    Discovered - needs review
                   </h3>
                   <p>
                     Check relevance, provenance and license before approval.
@@ -851,7 +860,7 @@ export function SourceManager({
               {approvedSources.length === 1 ? "" : "s"}
             </strong>
             <span>
-              {currentSources.length} total · discovered links stay out of the
+              {currentSources.length} total - discovered links stay out of the
               model
             </span>
           </div>

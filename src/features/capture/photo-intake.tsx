@@ -8,29 +8,31 @@ import {
   isSupportedImageType,
 } from "@/shared/image-file";
 import { db, type LocalAssetRecord } from "@/storage/indexed-db/db";
+import { MAX_USER_PHOTOS, MIN_USER_PHOTOS } from "@/config/meta-models";
 
-const PROJECT_ID = "eida-sm-t530-local";
-const MAX_PHOTOS = 8;
 const MAX_PHOTO_BYTES = 12 * 1024 * 1024;
 
 type PhotoView = LocalAssetRecord & { url: string };
 
 export function PhotoIntake({
+  projectId,
   onCountChange,
 }: {
+  projectId: string;
   onCountChange: (count: number) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const objectUrls = useRef(new Set<string>());
   const [photos, setPhotos] = useState<PhotoView[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     let active = true;
     const allocatedUrls = objectUrls.current;
     void db.assets
       .where("projectId")
-      .equals(PROJECT_ID)
+      .equals(projectId)
       .filter((asset) => asset.kind === "photo")
       .sortBy("createdAt")
       .then((records) => {
@@ -54,16 +56,16 @@ export function PhotoIntake({
       allocatedUrls.forEach((url) => URL.revokeObjectURL(url));
       allocatedUrls.clear();
     };
-  }, [onCountChange]);
+  }, [onCountChange, projectId]);
 
   async function addPhotos(files: FileList | null) {
     if (!files) return;
     setError(null);
-    const available = MAX_PHOTOS - photos.length;
+    const available = MAX_USER_PHOTOS - photos.length;
     const candidates = Array.from(files).slice(0, available);
 
     if (files.length > available) {
-      setError(`A project can contain up to ${MAX_PHOTOS} photos.`);
+      setError(`A project can contain up to ${MAX_USER_PHOTOS} photos.`);
     }
 
     const accepted: PhotoView[] = [];
@@ -83,7 +85,7 @@ export function PhotoIntake({
       const id = createLocalId("photo");
       const record: LocalAssetRecord = {
         id,
-        projectId: PROJECT_ID,
+        projectId,
         kind: "photo",
         name: file.name || `capture-${id.slice(0, 6)}.jpg`,
         mimeType: file.type,
@@ -130,25 +132,38 @@ export function PhotoIntake({
         id="photo-input"
         type="file"
         accept="image/jpeg,image/png,image/webp"
-        capture="environment"
         multiple
         onChange={(event) => void addPhotos(event.target.files)}
       />
       <button
         className="upload-zone"
         type="button"
+        data-dragging={dragging}
         onClick={() => inputRef.current?.click()}
-        disabled={photos.length >= MAX_PHOTOS}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          void addPhotos(event.dataTransfer.files);
+        }}
+        disabled={photos.length >= MAX_USER_PHOTOS}
       >
         <span className="upload-icon">
           <EidaIcon name="gallery" size={22} />
         </span>
         <span>
-          <strong>Add views</strong>
-          <small>Whole device, back, connectors : JPG, PNG, or WebP</small>
+          <strong>
+            {dragging ? "Drop to add views" : "Add or drop views"}
+          </strong>
+          <small>Whole device, back, connectors · JPG, PNG, or WebP</small>
         </span>
         <b>
-          {photos.length} / {MAX_PHOTOS}
+          {photos.length} / {MAX_USER_PHOTOS}
         </b>
       </button>
       {error && (
@@ -174,13 +189,20 @@ export function PhotoIntake({
           ))}
         </div>
       )}
-      <p className={photos.length >= 3 ? "requirement is-ok" : "requirement"}>
+      <p
+        className={
+          photos.length >= MIN_USER_PHOTOS ? "requirement is-ok" : "requirement"
+        }
+      >
         <span>
-          <EidaIcon name={photos.length >= 3 ? "check" : "info"} size={15} />
+          <EidaIcon
+            name={photos.length >= MIN_USER_PHOTOS ? "check" : "info"}
+            size={15}
+          />
         </span>
-        {photos.length >= 3
-          ? "Enough views are available to prepare an analysis"
-          : `${3 - photos.length} more view${3 - photos.length > 1 ? "s" : ""} required`}
+        {photos.length >= MIN_USER_PHOTOS
+          ? "Strong multi-view coverage is available"
+          : `Add ${MIN_USER_PHOTOS - photos.length} more view${MIN_USER_PHOTOS - photos.length === 1 ? "" : "s"} to start the reconstruction`}
       </p>
     </div>
   );

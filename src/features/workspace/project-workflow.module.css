@@ -202,8 +202,7 @@
   box-shadow: 0 0 0 3px rgba(223, 91, 57, 0.11);
 }
 .checkboxField,
-.consentField,
-.mapToggle {
+.consentField {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -215,37 +214,9 @@
   margin: 8px 0;
 }
 .checkboxField input,
-.consentField input,
-.mapToggle input {
+.consentField input {
   margin: 2px 0 0;
   accent-color: #df5b39;
-}
-.mapToggle {
-  margin-top: 12px;
-  padding: 10px;
-  border: 1px solid rgba(57, 118, 101, 0.18);
-  border-radius: 10px;
-  background: #edf6f1;
-}
-.mapToggle span {
-  display: grid;
-  gap: 3px;
-  color: #2a4940;
-  font-weight: 750;
-}
-.mapToggle small {
-  color: #6b7c76;
-  font-weight: 500;
-}
-.workerDetail {
-  margin: 9px 0 0;
-  color: #687b73;
-  font-size: 9px;
-  line-height: 1.45;
-}
-.workerDetail strong {
-  color: #28664e;
-  text-transform: uppercase;
 }
 .connectionButton,
 .sourceSummary button,
@@ -312,6 +283,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.inputDivider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 8px;
+  color: #7b888c;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.inputDivider::after {
+  height: 1px;
+  flex: 1;
+  background: rgba(23, 39, 45, 0.1);
+  content: "";
+}
 .warning,
 .requirement {
   margin: 8px 0 0;
@@ -335,6 +323,52 @@
 .dimensionGrid input {
   width: 100%;
   padding-right: 25px;
+}
+.priorityList {
+  margin: 11px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+  list-style: none;
+}
+.priorityList li {
+  padding: 7px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  border-radius: 8px;
+  background: #eff0ec;
+}
+.priorityList li[data-active="true"] {
+  background: #e5f2ea;
+  box-shadow: inset 0 0 0 1px rgba(43, 119, 91, 0.16);
+}
+.priorityList b {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: #dfe1dc;
+  color: #66757a;
+  font-size: 8px;
+}
+.priorityList li[data-active="true"] b {
+  background: #2b775b;
+  color: #fff;
+}
+.priorityList span {
+  display: grid;
+  gap: 2px;
+  color: #33474f;
+  font-size: 9px;
+  font-weight: 750;
+}
+.priorityList small {
+  color: #78868a;
+  font-size: 8px;
+  font-weight: 500;
 }
 .pipelineIntro {
   display: flex;
@@ -382,6 +416,14 @@
 .step[data-running="true"] {
   border-color: rgba(223, 91, 57, 0.5);
   background: #fff8f4;
+}
+.step[data-ready="true"] {
+  border-color: rgba(43, 119, 91, 0.32);
+  background: #f1f8f4;
+}
+.step[data-failed="true"] {
+  border-color: rgba(174, 62, 37, 0.3);
+  background: #fff4f0;
 }
 .step[data-complete="true"] {
   border-color: rgba(43, 119, 91, 0.24);
@@ -449,6 +491,14 @@
 .stepHeading > span[data-state="complete"] {
   background: #dff0e7;
   color: #247151;
+}
+.stepHeading > span[data-state="ready"] {
+  background: #dff0e7;
+  color: #247151;
+}
+.stepHeading > span[data-state="failed"] {
+  background: #ffe0d8;
+  color: #9a3d28;
 }
 .stepHeading > span[data-state="fallback"] {
   background: #ffe8df;
@@ -573,50 +623,6 @@
   border-radius: 14px;
   background: linear-gradient(135deg, #edf6f1, #f7f9f9);
 }
-.mapSummary {
-  margin-top: 14px;
-  padding: 17px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid rgba(57, 118, 101, 0.24);
-  border-radius: 14px;
-  background: #edf6f1;
-}
-.mapSummary > div {
-  min-width: 0;
-  flex: 1;
-}
-.mapSummary h2,
-.mapSummary p {
-  margin: 0;
-}
-.mapSummary h2 {
-  margin-top: 5px;
-  color: #263b42;
-  font-size: 15px;
-}
-.mapSummary p {
-  margin-top: 5px;
-  color: #687b73;
-  font-size: 9px;
-  line-height: 1.5;
-}
-.mapSummary a {
-  flex: 0 0 auto;
-  padding: 9px 12px;
-  border: 1px solid rgba(57, 118, 101, 0.32);
-  border-radius: 999px;
-  background: #fff;
-  color: #28664e;
-  font-size: 9px;
-  font-weight: 750;
-  text-decoration: none;
-}
-.mapSummary[data-fallback="true"] {
-  border-color: rgba(223, 91, 57, 0.24);
-  background: #fff3ed;
-}
 .graphSummary h2,
 .graphSummary p {
   margin: 0;
@@ -659,6 +665,17 @@
 .errorMessage {
   background: #ffebe4;
   color: #9a3d28;
+}
+.errorMessage button {
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(154, 61, 40, 0.28);
+  border-radius: 999px;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 750;
 }
 .launchArea {
   margin-top: 14px;
@@ -756,10 +773,6 @@
     grid-template-columns: 1fr;
   }
   .graphSummary {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .mapSummary {
     align-items: flex-start;
     flex-direction: column;
   }

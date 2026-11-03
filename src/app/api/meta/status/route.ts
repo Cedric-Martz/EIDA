@@ -4,6 +4,7 @@ import {
   metaApiKey,
   metaError,
 } from "@/server/meta/model-api";
+import { META_MODELS } from "@/config/meta-models";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
       configured: false,
       connected: false,
       source: "missing",
-      models: ["muse-spark-1.3", "sam-3.1"],
+      models: [META_MODELS.inventory, META_MODELS.segmentation],
     });
   }
 

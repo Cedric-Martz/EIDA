@@ -1,0 +1,144 @@
+.root {
+  margin-top: 12px;
+}
+
+.input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.dropzone {
+  width: 100%;
+  min-height: 72px;
+  padding: 11px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px dashed rgba(23, 39, 45, 0.24);
+  border-radius: 11px;
+  background: #f8f8f4;
+  color: #24383f;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dropzone[data-dragging="true"] {
+  border-color: #df5b39;
+  background: #fff3ed;
+}
+
+.dropzone:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #17272d;
+  color: #fff;
+}
+
+.copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.copy strong {
+  font-size: 10px;
+}
+
+.copy small,
+.count {
+  color: #748287;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.count {
+  white-space: nowrap;
+  font-weight: 750;
+}
+
+.list {
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  list-style: none;
+}
+
+.item {
+  min-width: 0;
+  padding: 8px 9px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border-radius: 9px;
+  background: #eef0eb;
+}
+
+.itemMain {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.itemMain strong {
+  overflow: hidden;
+  color: #2a3d44;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: #758287;
+  font-size: 8px;
+}
+
+.badge {
+  padding: 3px 5px;
+  border-radius: 999px;
+  background: #dff0e7;
+  color: #247151;
+  font-weight: 750;
+}
+
+.badge[data-status="warning"] {
+  background: #ffe8df;
+  color: #9b482f;
+}
+
+.remove {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(23, 39, 45, 0.12);
+  border-radius: 50%;
+  background: #fff;
+  color: #66777d;
+  cursor: pointer;
+}
+
+.error {
+  margin: 7px 0 0;
+  color: #9a3d28;
+  font-size: 9px;
+  line-height: 1.4;
+}

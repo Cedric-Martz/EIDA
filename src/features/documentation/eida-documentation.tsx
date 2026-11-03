@@ -10,20 +10,6 @@ npm install
 cp .env.example .env.local
 npm run dev`;
 
-const workerInstall = `git clone https://github.com/facebookresearch/map-anything.git
-cd map-anything
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -e .
-pip install -r ../EIDA/services/mapanything-worker/requirements.txt`;
-
-const workerStart = `cd ../EIDA/services/mapanything-worker
-export MAPANYTHING_REPO=/absolute/path/to/map-anything
-export EIDA_PUBLIC_BASE_URL=http://localhost:8001
-export EIDA_ALLOWED_ORIGINS=http://localhost:3000
-uvicorn app:app --host 127.0.0.1 --port 8001`;
-
 function CodeBlock({ children }: { children: string }) {
   return (
     <pre className={styles.code} tabIndex={0}>
@@ -53,7 +39,6 @@ export function EidaDocumentation() {
             <a href="#overview">Overview</a>
             <a href="#quick-start">Install EIDA</a>
             <a href="#meta">Meta setup</a>
-            <a href="#mapanything">Worker MapAnything</a>
             <a href="#studio">Studio setup</a>
             <a href="#pipeline">Workflow</a>
             <a href="#troubleshooting">Troubleshooting</a>
@@ -61,8 +46,7 @@ export function EidaDocumentation() {
           <div className={styles.sideStatus}>
             <i aria-hidden="true" />
             <span>
-              <strong>Local-first setup</strong>
-              Meta Model API + your own worker
+              <strong>Meta Model API + local geometry</strong>
             </span>
           </div>
         </aside>
@@ -72,14 +56,14 @@ export function EidaDocumentation() {
             <p className={styles.eyebrow}>Documentation / v1</p>
             <h1>Build traceable 3D assemblies from device photos.</h1>
             <p>
-              EIDA uses the Meta Model API to structure evidence and segment
-              components. An optional MapAnything worker aligns multiple views
-              in a shared metric scene.
+              EIDA searches public technical evidence, uses the Meta Model API
+              to identify and segment components, then compiles editable 3D
+              geometry locally.
             </p>
             <div className={styles.badges}>
-              <span>3-8 photos</span>
-              <span>Meta models</span>
-              <span>Apache MapAnything</span>
+              <span>3-16 photos</span>
+              <span>Muse Spark 1.3 + SAM 3.1</span>
+              <span>Web, manuals and CAD</span>
               <span>Local-first</span>
             </div>
           </section>
@@ -119,9 +103,9 @@ export function EidaDocumentation() {
                 <p>Parts inventory, prompts, segmentation, and masks.</p>
               </div>
               <div>
-                <span>Reconstruction worker</span>
-                <strong>MapAnything</strong>
-                <p>Multi-view alignment on infrastructure you control.</p>
+                <span>Research</span>
+                <strong>Live web + technical files</strong>
+                <p>Manuals, internal photos, drawings, dimensions and CAD.</p>
               </div>
               <div>
                 <span>Browser</span>
@@ -131,85 +115,49 @@ export function EidaDocumentation() {
             </div>
           </section>
 
-          <section className={styles.section} id="mapanything">
-            <div className={styles.sectionTitle}>
-              <span>03</span>
-              <div>
-                <p>Optional metric pass</p>
-                <h2>Start the MapAnything worker</h2>
-              </div>
-            </div>
-            <p>
-              The EIDA wrapper calls the official MapAnything script and uses
-              the Apache-licensed <code>facebook/map-anything-apache</code>
-              checkpoint. CUDA is recommended; CPU mode remains available for
-              asynchronous runs.
-            </p>
-            <h3>A. Install the model and wrapper</h3>
-            <CodeBlock>{workerInstall}</CodeBlock>
-            <h3>B. Start the local service</h3>
-            <CodeBlock>{workerStart}</CodeBlock>
-            <h3>C. Check availability</h3>
-            <CodeBlock>{`curl http://localhost:8001/health`}</CodeBlock>
-            <p>
-              The response must contain <code>&quot;ready&quot;: true</code>.
-              The
-              <code>device</code> field reports either <code>cuda</code> or the
-              <code>cpu</code> fallback.
-            </p>
-            <div className={styles.links}>
-              <a href="https://github.com/facebookresearch/map-anything">
-                Official MapAnything repository
-                <EidaIcon name="external" size={15} />
-              </a>
-              <a href="https://huggingface.co/facebook/map-anything-apache">
-                Apache checkpoint <EidaIcon name="external" size={15} />
-              </a>
-            </div>
-          </section>
-
           <section className={styles.section} id="studio">
             <div className={styles.sectionTitle}>
               <span>04</span>
               <div>
                 <p>Studio setup</p>
-                <h2>Connect the worker in EIDA</h2>
+                <h2>Prepare evidence in EIDA</h2>
               </div>
             </div>
             <ol className={styles.steps}>
               <li>
                 <span>1</span>
                 <p>
-                  Open a project, select the sources, and add three to eight
-                  complementary views.
+                  Identify the exact device variant. EIDA searches iFixit and
+                  the wider web for manuals, photos, drawings and 3D files.
                 </p>
               </li>
               <li>
                 <span>2</span>
                 <p>
-                  Open <strong>Meta reconstruction</strong>, then enable
-                  <strong> Add metric multi-view registration</strong>.
+                  Review the automatically enabled results and remove or
+                  unapprove anything that belongs to another variant.
                 </p>
               </li>
               <li>
                 <span>3</span>
                 <p>
-                  Use <code>http://localhost:8001</code> and select
-                  <strong> Connect MapAnything</strong>.
+                  Add 3 to 16 complementary user photos. Public-source images
+                  are added automatically after extraction.
                 </p>
               </li>
               <li>
                 <span>4</span>
                 <p>
-                  Start the reconstruction. MapAnything runs alongside Muse and
-                  SAM while the component graph is prepared.
+                  Start reconstruction. Muse builds up to 24 evidence-supported
+                  elements and SAM extracts the clearest available outline for
+                  each one.
                 </p>
               </li>
             </ol>
             <div className={styles.callout}>
-              <strong>Remote worker</strong>
-              Use an HTTPS URL, restrict CORS origins, and set
-              <code>EIDA_WORKER_TOKEN</code>. The token stays in the session.
+              <strong>Visual budget</strong>
+              One run can inspect up to 16 user photos and 32 public-source
+              images. The official Muse request limit is 50 images.
             </div>
           </section>
 
@@ -239,24 +187,18 @@ export function EidaDocumentation() {
                 <span>SAM</span>
                 <small>outlines</small>
               </div>
-              <EidaIcon name="plus" size={16} />
-              <div>
-                <b>04</b>
-                <span>Map</span>
-                <small>metric scene</small>
-              </div>
               <EidaIcon name="arrow-right" size={16} />
               <div>
-                <b>05</b>
+                <b>04</b>
                 <span>EIDA</span>
                 <small>graph + GLB</small>
               </div>
             </div>
             <p>
-              EIDA tracks the MapAnything job and stores its status in
-              IndexedDB. The resulting GLB and report are linked to the graph as
-              spatial evidence. If the worker becomes unavailable, EIDA
-              completes the local SAM path and reports the fallback.
+              Every accepted mask becomes an editable graph element with its own
+              geometry recipe and GLB asset. Dimensions from parsed STEP or DXF
+              files constrain scale when they can be tied to the exact
+              component.
             </p>
           </section>
 
@@ -269,35 +211,27 @@ export function EidaDocumentation() {
               </div>
             </div>
             <details>
-              <summary>The worker returns ready: false</summary>
+              <summary>General web results are missing</summary>
               <p>
-                Check <code>MAPANYTHING_REPO</code>, the PyTorch installation,
-                and the presence of
-                <code>scripts/demo_images_only_inference.py</code>.
+                Check <code>MODEL_API_KEY</code>. The local research route uses
+                Muse Spark 1.3 search grounding; the static GitHub Pages build
+                falls back to direct iFixit search.
               </p>
             </details>
             <details>
-              <summary>The browser blocks the request</summary>
+              <summary>Processing takes too long</summary>
               <p>
-                Add the exact EIDA origin to
-                <code>EIDA_ALLOWED_ORIGINS</code>. Remote URLs must use HTTPS;
-                HTTP is accepted only on localhost.
-              </p>
-            </details>
-            <details>
-              <summary>CPU processing takes too long</summary>
-              <p>
-                Reduce the input to four clear views or use a GPU worker.
-                Results already produced by Muse and SAM are kept during the
-                fallback.
+                Remove duplicate or low-value sources. More source images can
+                improve coverage but each accepted component requires its own
+                SAM segmentation call.
               </p>
             </details>
             <details>
               <summary>Where are generated files stored?</summary>
               <p>
-                The worker stores GLB files and reports in
-                <code>services/mapanything-worker/.data/artifacts</code>.
-                Temporary photos are deleted when the job finishes.
+                Projects, photos and reconstruction graphs stay in browser
+                IndexedDB. The downloadable <code>.eida.json</code> graph
+                contains the individual compiled GLB assets.
               </p>
             </details>
           </section>
