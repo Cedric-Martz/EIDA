@@ -677,8 +677,8 @@ function Part({
   const isCylinder = renderGeometry.primitive === "cylinder";
   const renderableAsset =
     assemblyPart?.geometry.kind === "asset" &&
-      geometryAsset &&
-      (geometryAsset.format === "glb" || geometryAsset.format === "gltf")
+    geometryAsset &&
+    (geometryAsset.format === "glb" || geometryAsset.format === "gltf")
       ? geometryAsset
       : null;
   const [physicalX, physicalY] = physicalOffsets[component.id] ?? [0, 0];
@@ -1037,10 +1037,7 @@ function CameraControls({
 
   useEffect(() => {
     const previous = initialPreset.current;
-    if (
-      previous.resetKey !== resetKey ||
-      previous.viewPreset !== viewPreset
-    ) {
+    if (previous.resetKey !== resetKey || previous.viewPreset !== viewPreset) {
       stopAutoRotatePermanently();
       initialPreset.current = { resetKey, viewPreset };
     }
@@ -1236,7 +1233,7 @@ export function DeviceViewer({
     () =>
       new Map(
         assembly?.materialProfiles.map((profile) => [profile.id, profile]) ??
-        [],
+          [],
       ),
     [assembly],
   );
@@ -1335,8 +1332,8 @@ export function DeviceViewer({
       const radius = Math.max(
         0.5,
         Math.max(...(geometry?.dimensionsMm ?? DEFAULT_DIMENSIONS_MM)) *
-        SCENE_SCALE *
-        0.75,
+          SCENE_SCALE *
+          0.75,
       );
       return {
         target: [target?.x ?? 0, target?.y ?? 0, target?.z ?? 0] as const,
