@@ -1,6 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Canvas,
   type ThreeEvent,
@@ -670,8 +677,8 @@ function Part({
   const isCylinder = renderGeometry.primitive === "cylinder";
   const renderableAsset =
     assemblyPart?.geometry.kind === "asset" &&
-    geometryAsset &&
-    (geometryAsset.format === "glb" || geometryAsset.format === "gltf")
+      geometryAsset &&
+      (geometryAsset.format === "glb" || geometryAsset.format === "gltf")
       ? geometryAsset
       : null;
   const [physicalX, physicalY] = physicalOffsets[component.id] ?? [0, 0];
@@ -1006,10 +1013,38 @@ function CameraControls({
   enabled: boolean;
 }) {
   const controls = useRef<OrbitControlsImpl>(null);
+  const cameraInteractionActive = useRef(false);
+  const cameraWasMoved = useRef(false);
+  const initialPreset = useRef({ resetKey, viewPreset });
+  const [autoRotate, setAutoRotate] = useState(false);
   const camera = useThree((state) => state.camera);
   const invalidate = useThree((state) => state.invalidate);
   const minDistance = Math.max(0.45, fitRadius * 0.45);
   const maxDistance = Math.max(12, fitRadius * 9);
+
+  const stopAutoRotatePermanently = useCallback(() => {
+    cameraWasMoved.current = true;
+    setAutoRotate(false);
+  }, []);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (!cameraWasMoved.current) setAutoRotate(true);
+    }, 5_000);
+
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    const previous = initialPreset.current;
+    if (
+      previous.resetKey !== resetKey ||
+      previous.viewPreset !== viewPreset
+    ) {
+      stopAutoRotatePermanently();
+      initialPreset.current = { resetKey, viewPreset };
+    }
+  }, [resetKey, stopAutoRotatePermanently, viewPreset]);
 
   useEffect(() => {
     const orbit = controls.current;
@@ -1102,6 +1137,7 @@ function CameraControls({
 
       if (!handled) return;
       event.preventDefault();
+      stopAutoRotatePermanently();
       if (movement.lengthSq() > 0) {
         camera.position.add(movement);
         orbit.target.add(movement);
@@ -1112,13 +1148,22 @@ function CameraControls({
 
     window.addEventListener("keydown", navigateWithKeyboard);
     return () => window.removeEventListener("keydown", navigateWithKeyboard);
-  }, [camera, enabled, invalidate, maxDistance, minDistance]);
+  }, [
+    camera,
+    enabled,
+    invalidate,
+    maxDistance,
+    minDistance,
+    stopAutoRotatePermanently,
+  ]);
 
   return (
     <OrbitControls
       ref={controls}
       makeDefault
       enabled={enabled}
+      autoRotate={autoRotate}
+      autoRotateSpeed={0.75}
       enableDamping
       dampingFactor={0.08}
       enablePan
@@ -1130,6 +1175,15 @@ function CameraControls({
       maxDistance={maxDistance}
       minPolarAngle={0.28}
       maxPolarAngle={1.48}
+      onStart={() => {
+        cameraInteractionActive.current = true;
+      }}
+      onChange={() => {
+        if (cameraInteractionActive.current) stopAutoRotatePermanently();
+      }}
+      onEnd={() => {
+        cameraInteractionActive.current = false;
+      }}
     />
   );
 }
@@ -1182,7 +1236,7 @@ export function DeviceViewer({
     () =>
       new Map(
         assembly?.materialProfiles.map((profile) => [profile.id, profile]) ??
-          [],
+        [],
       ),
     [assembly],
   );
@@ -1281,8 +1335,8 @@ export function DeviceViewer({
       const radius = Math.max(
         0.5,
         Math.max(...(geometry?.dimensionsMm ?? DEFAULT_DIMENSIONS_MM)) *
-          SCENE_SCALE *
-          0.75,
+        SCENE_SCALE *
+        0.75,
       );
       return {
         target: [target?.x ?? 0, target?.y ?? 0, target?.z ?? 0] as const,
