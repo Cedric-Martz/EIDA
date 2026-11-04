@@ -308,10 +308,17 @@ export function EidaLanding({
             <br />
             Keep the evidence together.
           </h2>
-          <button type="button" onClick={openDemo}>
+          <a
+            className={styles.finalCtaLink}
+            href="?demo=reference"
+            onClick={(event) => {
+              event.preventDefault();
+              openDemo();
+            }}
+          >
             <span>Explore the reference reconstruction</span>
             <EidaIcon name="external" size={20} />
-          </button>
+          </a>
         </section>
       </div>
 

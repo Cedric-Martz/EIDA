@@ -304,7 +304,7 @@
 }
 
 .primaryCta,
-.finalCta button {
+.finalCtaLink {
   min-height: 72px;
   padding: 9px 10px 9px 25px;
   display: inline-flex;
@@ -316,6 +316,8 @@
   color: #fff;
   box-shadow: 0 19px 42px rgba(123, 62, 45, 0.2);
   cursor: pointer;
+  text-decoration: none;
+  touch-action: manipulation;
   text-align: left;
   transition:
     transform 220ms ease,
@@ -324,14 +326,14 @@
 }
 
 .primaryCta:hover,
-.finalCta button:hover {
+.finalCtaLink:hover {
   background: var(--orange-deep);
   box-shadow: 0 24px 52px rgba(123, 62, 45, 0.28);
   transform: translateY(-3px);
 }
 
 .primaryCta > span,
-.finalCta button > span {
+.finalCtaLink > span {
   display: grid;
   gap: 3px;
   font-size: 14px;
@@ -339,7 +341,7 @@
 }
 
 .primaryCta small,
-.finalCta button small {
+.finalCtaLink small {
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: 8px;
   font-weight: 650;
@@ -349,7 +351,7 @@
 }
 
 .primaryCta b,
-.finalCta button b {
+.finalCtaLink b {
   width: 50px;
   height: 50px;
   display: grid;
@@ -1425,6 +1427,7 @@
   aspect-ratio: 1;
   border: 1px solid rgba(23, 39, 45, 0.1);
   border-radius: 50%;
+  pointer-events: none;
 }
 
 .finalCta::before {
@@ -1465,7 +1468,7 @@
 
 .finalCta .sectionIndex,
 .finalCta h2,
-.finalCta button,
+.finalCtaLink,
 .finalCta > p:last-child {
   position: relative;
   z-index: 3;
@@ -1475,7 +1478,7 @@
   max-width: 1050px;
 }
 
-.finalCta button {
+.finalCtaLink {
   margin-top: 43px;
 }
 
@@ -1816,7 +1819,7 @@
     width: 76vw;
   }
 
-  .finalCta button {
+  .finalCtaLink {
     width: 100%;
     max-width: 360px;
     justify-content: space-between;
@@ -1856,7 +1859,7 @@
   }
 
   .primaryCta,
-  .finalCta button,
+  .finalCtaLink,
   .nav button,
   .storyCard,
   .nowCard,
